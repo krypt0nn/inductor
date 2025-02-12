@@ -48,7 +48,11 @@ pub enum EmbeddingsCLI {
 
         #[arg(long, short, default_value_t = 10)]
         /// Number of epochs to train the word embeddings model.
-        epochs: usize
+        epochs: usize,
+
+        #[arg(long, default_value_t = 0.0015)]
+        /// Learn rate of the model training.
+        learn_rate: f64
     },
 
     /// Update embeddings for all tokens from the database using provided model.
@@ -92,7 +96,7 @@ impl EmbeddingsCLI {
                 }
             }
 
-            Self::Train { documents, lowercase, strip_punctuation, tokens, model, epochs } => {
+            Self::Train { documents, lowercase, strip_punctuation, tokens, model, epochs, learn_rate } => {
                 let embeddings = database.canonicalize().unwrap_or(database);
                 let documents = documents.canonicalize().unwrap_or(documents);
                 let tokens = tokens.canonicalize().unwrap_or(tokens);
@@ -218,7 +222,7 @@ impl EmbeddingsCLI {
                     .build(
                         embeddings_model,
                         AdamWConfig::new().init(),
-                        CosineAnnealingLrSchedulerConfig::new(0.0015, 10).init().unwrap()
+                        CosineAnnealingLrSchedulerConfig::new(learn_rate, 10).init().unwrap()
                     );
 
                 let embeddings_model = learner.fit(train_samples_dataset, validate_samples_dataset);

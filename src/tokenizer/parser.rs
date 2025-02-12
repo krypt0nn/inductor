@@ -146,7 +146,7 @@ impl Iterator for TokensReader {
                 }
 
                 // Store the XML token if it's valid.
-                else if self.current < len {
+                else if self.current + 1 < len {
                     self.current += 1;
 
                     // Skip "/" right after "<" (intended syntax).
