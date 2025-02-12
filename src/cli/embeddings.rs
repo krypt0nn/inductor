@@ -11,7 +11,7 @@ use burn::backend::{Autodiff, NdArray, ndarray::NdArrayDevice};
 use burn::data::dataloader::{Dataset, DataLoaderBuilder};
 use burn::data::dataset::transform::{ComposedDataset, ShuffledDataset, PartialDataset};
 use burn::train::LearnerBuilder;
-use burn::train::metric::LossMetric;
+use burn::train::metric::{LossMetric, CpuUse, CpuMemory};
 use burn::optim::AdamWConfig;
 use burn::lr_scheduler::cosine::CosineAnnealingLrSchedulerConfig;
 
@@ -84,7 +84,7 @@ impl EmbeddingsCLI {
             Self::Create => {
                 let database = database.canonicalize().unwrap_or(database);
 
-                println!("⏳ Creating tokens database in {database:?}...");
+                println!("⏳ Creating word embeddings database in {database:?}...");
 
                 match WordEmbeddingsDatabase::open(&database, cache_size) {
                     Ok(_) => println!("{}", "🚀 Database created".green()),
@@ -188,12 +188,12 @@ impl EmbeddingsCLI {
 
                 let train_samples_dataset = DataLoaderBuilder::new(WordEmbeddingTrainSamplesBatcher)
                     .num_workers(4)
-                    .batch_size(16)
+                    .batch_size(64)
                     .build(train_samples_dataset);
 
                 let validate_samples_dataset = DataLoaderBuilder::new(WordEmbeddingTrainSamplesBatcher)
                     .num_workers(4)
-                    .batch_size(16)
+                    .batch_size(64)
                     .build(validate_samples_dataset);
 
                 println!("⏳ Opening the model...");
@@ -208,6 +208,10 @@ impl EmbeddingsCLI {
                     // .metric_valid_numeric(AccuracyMetric::new())
                     .metric_train_numeric(LossMetric::new())
                     .metric_valid_numeric(LossMetric::new())
+                    .metric_train_numeric(CpuUse::new())
+                    .metric_valid_numeric(CpuUse::new())
+                    .metric_train_numeric(CpuMemory::new())
+                    .metric_valid_numeric(CpuMemory::new())
                     .devices(vec![device])
                     .num_epochs(epochs)
                     .summary()

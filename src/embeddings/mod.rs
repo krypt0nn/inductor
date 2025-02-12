@@ -8,13 +8,13 @@ pub mod train_batches;
 pub mod model;
 
 /// Maximal amount of tokens which can be learned by the word embeddings model.
-pub const EMBEDDING_MAX_TOKENS: usize = 1048576;
+pub const EMBEDDING_MAX_TOKENS: usize = 65536;
 
 /// Amount of tokens around the target one to train embeddings model on.
 pub const EMBEDDING_CONTEXT_RADIUS: usize = 6;
 
 /// Amount of dimensions in the word embedding vector.
-pub const EMBEDDING_SIZE: usize = 64;
+pub const EMBEDDING_SIZE: usize = 32;
 
 pub mod prelude {
     pub use super::database::Database as WordEmbeddingsDatabase;
