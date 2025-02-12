@@ -1,3 +1,6 @@
+use std::collections::VecDeque;
+use std::iter::FusedIterator;
+
 use crate::prelude::*;
 
 #[derive(Default, Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -27,158 +30,34 @@ impl Parser {
         }
     }
 
-    /// Return vector of separate words and symbols (tokens) from the given document.
-    ///
-    /// If `include_ending = true` then `</output>` tag is added to the final vector.
-    pub fn parse(&self, document: &Document, include_ending: bool) -> Vec<String> {
-        fn parse_text(text: &str, lowercase: bool, strip_punctuation: bool) -> Vec<String> {
-            let mut tokens = Vec::new();
+    /// Get tokens reader from the given string.
+    pub fn read_text(&self, text: impl ToString) -> TokensReader {
+        let mut text = text.to_string();
 
-            let mut i = 0;
-            let mut j = 0;
-
-            let text: Vec<char> = if lowercase {
-                text.to_lowercase().chars().collect()
-            } else {
-                text.chars().collect()
-            };
-
-            let n = text.len();
-
-            while j < n {
-                // Continue collecting alpha-numerics (literal values built from letters and numbers).
-                if text[j].is_alphanumeric() {
-                    j += 1;
-                }
-
-                // Skip whitespaces.
-                else if text[j].is_whitespace() {
-                    // Store the word before whitespace.
-                    if i < j {
-                        tokens.push(text[i..j].iter().collect());
-                    }
-
-                    // Skip all the following whitespaces as well.
-                    while j < n && text[j].is_whitespace() {
-                        tokens.push(text[j].to_string());
-
-                        j += 1;
-                    }
-
-                    // Set cursor to the whitespace's end.
-                    i = j;
-                }
-
-                // XML tags.
-                else if text[j] == '<' {
-                    // Store the word before the symbol.
-                    if i < j {
-                        tokens.push(text[i..j].iter().collect());
-                    }
-
-                    i = j;
-
-                    // If there's more symbols after "<".
-                    if j + 1 < n {
-                        j += 1;
-
-                        // Skip "/" right after "<" (intended syntax).
-                        if text[j] == '/' {
-                            j += 1;
-                        }
-
-                        // Iterate over the content of the tag.
-                        while j < n && (text[j].is_alphanumeric() || ['_', '-'].contains(&text[j])) {
-                            j += 1;
-                        }
-
-                        // If it was properly closed - store it as a single tag.
-                        if j < n && text[j] == '>' {
-                            tokens.push(text[i..=j].iter().collect());
-                        }
-
-                        // Otherwise store "<", "/" and literal value separately.
-                        else {
-                            tokens.push(String::from("<"));
-
-                            // Store "/" and literal separately.
-                            if text[i + 1] == '/' {
-                                tokens.push(String::from("/"));
-                                tokens.push(text[i + 2..j].iter().collect());
-                            }
-
-                            // Store just the literal if there weren't "/".
-                            else {
-                                tokens.push(text[i + 1..j].iter().collect());
-                            }
-
-                            // Store whatever other symbol we got (if we got any).
-                            if j < n {
-                                tokens.push(text[j].to_string());
-                            }
-                        }
-
-                        j += 1;
-                        i = j;
-                    }
-
-                    // Just store this random "<" as a token.
-                    else {
-                        tokens.push(text[j].to_string());
-                    }
-                }
-
-                // Store special symbol (non-alpha-numeric value).
-                else {
-                    // Store the word before the symbol.
-                    if i < j {
-                        tokens.push(text[i..j].iter().collect());
-                    }
-
-                    // Store the symbol.
-                    if !strip_punctuation || !text[j].is_ascii_punctuation() {
-                        tokens.push(text[j].to_string());
-                    }
-
-                    // Update cursors.
-                    j += 1;
-                    i = j;
-                }
-            }
-
-            // Store remaining word.
-            if i < j {
-                tokens.push(text[i..j].iter().collect());
-            }
-
-            tokens
+        if self.lowercase {
+            text = text.to_lowercase();
         }
 
-        let mut input_tokens = parse_text(&document.input, self.lowercase, self.strip_punctuation);
-        let mut context_tokens = parse_text(&document.context, self.lowercase, self.strip_punctuation);
-        let mut output_tokens = parse_text(&document.output, self.lowercase, self.strip_punctuation);
+        TokensReader {
+            text: text.chars()
+                .filter(|char| !self.strip_punctuation || !char.is_ascii_punctuation())
+                .collect::<VecDeque<char>>(),
 
-        let mut tokens = Vec::with_capacity(input_tokens.len() + context_tokens.len() + output_tokens.len() + 10);
-
-        // <input>...</input>
-        tokens.push(Self::INPUT_OPEN_TAG.to_string());
-        tokens.append(&mut input_tokens);
-        tokens.push(Self::INPUT_CLOSE_TAG.to_string());
-
-        // <context>...</context>
-        tokens.push(Self::CONTEXT_OPEN_TAG.to_string());
-        tokens.append(&mut context_tokens);
-        tokens.push(Self::CONTEXT_CLOSE_TAG.to_string());
-
-        // <output>...</output>
-        tokens.push(Self::OUTPUT_OPEN_TAG.to_string());
-        tokens.append(&mut output_tokens);
-
-        if include_ending {
-            tokens.push(Self::OUTPUT_CLOSE_TAG.to_string());
+            current: 0
         }
+    }
 
-        tokens
+    /// Get tokens reader from the given document.
+    pub fn read_document(&self, document: Document) -> impl Iterator<Item = String> {
+        [Self::INPUT_OPEN_TAG.to_string()].into_iter()
+            .chain(self.read_text(document.input))
+            .chain([Self::INPUT_CLOSE_TAG.to_string()])
+            .chain([Self::CONTEXT_OPEN_TAG.to_string()])
+            .chain(self.read_text(document.context))
+            .chain([Self::CONTEXT_CLOSE_TAG.to_string()])
+            .chain([Self::OUTPUT_OPEN_TAG.to_string()])
+            .chain(self.read_text(document.output))
+            .chain([Self::OUTPUT_CLOSE_TAG.to_string()])
     }
 
     /// Try to reconstruct document from the given tokens slice.
@@ -217,13 +96,143 @@ impl Parser {
     }
 }
 
+pub struct TokensReader {
+    text: VecDeque<char>,
+    current: usize
+}
+
+impl Iterator for TokensReader {
+    type Item = String;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let len = self.text.len();
+
+        while self.current < len {
+            // Continue collecting alpha-numerics (literal values built from letters and numbers).
+            if self.text[self.current].is_alphanumeric() {
+                self.current += 1;
+            }
+
+            // Skip whitespaces.
+            else if self.text[self.current].is_whitespace() {
+                // Store the word before whitespace.
+                if self.current > 0 {
+                    let literal = self.text.drain(0..self.current)
+                        .collect::<String>();
+
+                    self.current = 0;
+
+                    return Some(literal);
+                }
+
+                // Store whitespace characters.
+                else {
+                    let whitespace = self.text.pop_front()?.to_string();
+
+                    return Some(whitespace);
+                }
+            }
+
+            // Store XML tags as single tokens.
+            else if self.text[self.current] == '<' {
+                // Store the word before the "<".
+                if self.current > 0 {
+                    let literal = self.text.drain(0..self.current)
+                        .collect::<String>();
+
+                    self.current = 0;
+
+                    return Some(literal);
+                }
+
+                // Store the XML token if it's valid.
+                else if self.current < len {
+                    self.current += 1;
+
+                    // Skip "/" right after "<" (intended syntax).
+                    if self.text[self.current] == '/' {
+                        self.current += 1;
+                    }
+
+                    // Iterate over the content of the tag.
+                    while self.current < len && (self.text[self.current].is_alphanumeric() || ['_', '-'].contains(&self.text[self.current])) {
+                        self.current += 1;
+                    }
+
+                    // If it was properly closed - store it as a single tag.
+                    if self.current < len && self.text[self.current] == '>' {
+                        let tag = self.text.drain(0..=self.current)
+                            .collect::<String>();
+
+                        self.current = 0;
+
+                        return Some(tag);
+                    }
+
+                    // Otherwise store "<" and let tokenizer check the string again.
+                    else {
+                        let char = self.text.pop_front()?.to_string();
+
+                        self.current = 0;
+
+                        return Some(char);
+                    }
+                }
+
+                // Just store "<" as token.
+                else {
+                    let char = self.text.pop_front()?.to_string();
+
+                    return Some(char);
+                }
+            }
+
+            // Store special symbol (non-alpha-numeric value).
+            else {
+                // Store the word before the symbol.
+                if self.current > 0 {
+                    let literal = self.text.drain(0..self.current)
+                        .collect::<String>();
+
+                    self.current = 0;
+
+                    return Some(literal);
+                }
+
+                // Store the symbol itself.
+                else {
+                    let symbol = self.text.pop_front()?.to_string();
+
+                    return Some(symbol);
+                }
+            }
+        }
+
+        // Store remaining literal.
+        if self.current > 0 {
+            let literal = self.text.drain(0..self.current)
+                .collect::<String>();
+
+            self.current = 0;
+
+            return Some(literal);
+        }
+
+        None
+    }
+}
+
+impl FusedIterator for TokensReader {}
+
 #[test]
 fn test_document_tokenizer() {
     let document = Document::new("Example document")
         .with_input("With <very> =special11- #@%\"<-input->\"!")
         .with_context("</and_potentially> broken <xml @ tags>");
 
-    let tokens = Parser::default().parse(&document, true);
+    let tokens = Parser::default()
+        .read_document(document.clone())
+        .collect::<Vec<String>>();
 
     assert_eq!(tokens, &[
         "<input>", "With", " ", "<very>", " ", "=", "special11", "-", " ", "#", "@", "%", "\"", "<-input->", "\"", "!", "</input>",

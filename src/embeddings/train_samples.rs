@@ -17,13 +17,12 @@ pub struct WordEmbeddingsTrainSamplesDataset<B: Backend> {
 impl<B: Backend> WordEmbeddingsTrainSamplesDataset<B> {
     /// Split given document into words and convert them into tokens.
     pub fn from_document(
-        document: &Document,
+        document: Document,
         parser: &DocumentsParser,
         tokens_db: &TokensDatabase,
         device: B::Device
     ) -> anyhow::Result<Self> {
-        let tokens = parser.parse(document, true)
-            .into_iter()
+        let tokens = parser.read_document(document)
             .map(|word| tokens_db.insert_token(word).map(|token| token as usize))
             .collect::<anyhow::Result<Vec<usize>>>()?;
 

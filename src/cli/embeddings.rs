@@ -155,14 +155,14 @@ impl EmbeddingsCLI {
 
                 documents.for_each(|document| {
                     let train_dataset = WordEmbeddingsTrainSamplesDataset::<AutodiffNdArray>::from_document(
-                        &document,
+                        document.clone(),
                         &parser,
                         &tokens,
                         device
                     )?;
 
                     let validate_dataset = WordEmbeddingsTrainSamplesDataset::<NdArray>::from_document(
-                        &document,
+                        document,
                         &parser,
                         &tokens,
                         device

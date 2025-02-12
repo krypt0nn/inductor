@@ -78,7 +78,7 @@ impl TokensCLI {
                     // Make new one for each document so this struct potentially won't fill whole RAM.
                     let mut inserted_tokens = HashSet::new();
 
-                    for token in parser.parse(&document, true) {
+                    for token in parser.read_document(document) {
                         if inserted_tokens.insert(token.clone()) {
                             tokens.insert_token(token)?;
                         }
