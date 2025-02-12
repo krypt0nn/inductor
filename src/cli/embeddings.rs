@@ -6,8 +6,7 @@ use clap::Parser;
 use colorful::Colorful;
 use rand::SeedableRng;
 
-use burn::prelude::*;
-use burn::backend::{Autodiff, NdArray, ndarray::NdArrayDevice};
+use burn::backend::{Autodiff, Wgpu, wgpu::WgpuDevice};
 use burn::data::dataloader::{Dataset, DataLoaderBuilder};
 use burn::data::dataset::transform::{ComposedDataset, ShuffledDataset, PartialDataset};
 use burn::train::LearnerBuilder;
@@ -15,7 +14,9 @@ use burn::train::metric::{LossMetric, CpuUse, CpuMemory};
 use burn::optim::AdamWConfig;
 use burn::lr_scheduler::cosine::CosineAnnealingLrSchedulerConfig;
 
-type AutodiffNdArray = Autodiff<NdArray>;
+type Backend = Wgpu;
+type AutodiffBackend = Autodiff<Backend>;
+type Device = WgpuDevice;
 
 use crate::prelude::*;
 
@@ -149,27 +150,27 @@ impl EmbeddingsCLI {
                 println!("⏳ Preparing training datasets...");
 
                 let parser = DocumentsParser::new(lowercase, strip_punctuation);
-                let device = NdArrayDevice::Cpu;
+                let device = Device::default();
 
-                NdArray::<f32, i32, i8>::seed(fastrand::u64(..));
-                AutodiffNdArray::seed(fastrand::u64(..));
+                // Backend::seed(fastrand::u64(..));
+                // AutodiffBackend::seed(fastrand::u64(..));
 
                 let mut train_samples_dataset = Vec::new();
                 let mut validate_samples_dataset = Vec::new();
 
                 documents.for_each(|document| {
-                    let train_dataset = WordEmbeddingsTrainSamplesDataset::<AutodiffNdArray>::from_document(
+                    let train_dataset = WordEmbeddingsTrainSamplesDataset::<AutodiffBackend>::from_document(
                         document.clone(),
                         &parser,
                         &tokens,
-                        device
+                        device.clone()
                     )?;
 
-                    let validate_dataset = WordEmbeddingsTrainSamplesDataset::<NdArray>::from_document(
+                    let validate_dataset = WordEmbeddingsTrainSamplesDataset::<Backend>::from_document(
                         document,
                         &parser,
                         &tokens,
-                        device
+                        device.clone()
                     )?;
 
                     train_samples_dataset.push(train_dataset);
@@ -202,8 +203,8 @@ impl EmbeddingsCLI {
 
                 println!("⏳ Opening the model...");
 
-                let embeddings_model = WordEmbeddingModel::<AutodiffNdArray>::load(&model, &device)
-                    .unwrap_or_else(|_| WordEmbeddingModel::<AutodiffNdArray>::random(&device));
+                let embeddings_model = WordEmbeddingModel::<AutodiffBackend>::load(&model, &device)
+                    .unwrap_or_else(|_| WordEmbeddingModel::<AutodiffBackend>::random(&device));
 
                 println!("⏳ Training the model...");
 
@@ -216,7 +217,7 @@ impl EmbeddingsCLI {
                     .metric_valid_numeric(CpuUse::new())
                     .metric_train_numeric(CpuMemory::new())
                     .metric_valid_numeric(CpuMemory::new())
-                    .devices(vec![device])
+                    .devices(vec![device.clone()])
                     .num_epochs(epochs)
                     .summary()
                     .build(
@@ -276,10 +277,10 @@ impl EmbeddingsCLI {
 
                 println!("⏳ Opening the model...");
 
-                let device = NdArrayDevice::Cpu;
+                let device = Device::default();
 
-                let embeddings_model = WordEmbeddingModel::<AutodiffNdArray>::load(&model, &device)
-                    .unwrap_or_else(|_| WordEmbeddingModel::<AutodiffNdArray>::random(&device));
+                let embeddings_model = WordEmbeddingModel::<AutodiffBackend>::load(&model, &device)
+                    .unwrap_or_else(|_| WordEmbeddingModel::<AutodiffBackend>::random(&device));
 
                 println!("⏳ Updating token embeddings...");
 

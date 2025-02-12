@@ -30,13 +30,19 @@
             };
 
             in {
-                devShells.default = pkgs.mkShell {
+                devShells.default = pkgs.mkShell rec {
+                    buildInputs = with pkgs; [
+                        vulkan-loader
+                    ];
+
                     nativeBuildInputs = with pkgs; [
                         (rust-bin.stable.latest.default.override {
                             extensions = [ "rust-src" ];
                         })
                         gcc
                     ];
+
+                    LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath buildInputs;
                 };
             });
 }
