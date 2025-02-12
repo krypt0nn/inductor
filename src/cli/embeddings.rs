@@ -188,12 +188,12 @@ impl EmbeddingsCLI {
 
                 let train_samples_dataset = DataLoaderBuilder::new(WordEmbeddingTrainSamplesBatcher)
                     .num_workers(4)
-                    .batch_size(64)
+                    .batch_size(16)
                     .build(train_samples_dataset);
 
                 let validate_samples_dataset = DataLoaderBuilder::new(WordEmbeddingTrainSamplesBatcher)
                     .num_workers(4)
-                    .batch_size(64)
+                    .batch_size(16)
                     .build(validate_samples_dataset);
 
                 println!("⏳ Opening the model...");
