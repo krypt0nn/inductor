@@ -36,6 +36,14 @@ pub enum EmbeddingsCLI {
         /// Path to the word embeddings model.
         model: PathBuf,
 
+        #[arg(long, short, default_value_t = 65536)]
+        /// Maximal amount of tokens which can be encoded by the model
+        one_hot_tokens: usize,
+
+        #[arg(long, short, default_value_t = 128)]
+        /// Amount of dimensions in a word embedding.
+        embedding_size: usize,
+
         #[arg(long, short)]
         /// Convert content of the documents to lowercase.
         lowercase: bool,
@@ -52,11 +60,11 @@ pub enum EmbeddingsCLI {
         /// Address of remote device used for training.
         remote_device: Vec<String>,
 
-        #[arg(long, short, default_value_t = 10)]
+        #[arg(long, default_value_t = 10)]
         /// Number of epochs to train the word embeddings model.
         epochs: usize,
 
-        #[arg(long, default_value_t = 0.015)]
+        #[arg(long, default_value_t = 0.035)]
         /// Learn rate of the model training.
         learn_rate: f64
     },
@@ -69,7 +77,15 @@ pub enum EmbeddingsCLI {
 
         #[arg(long, short)]
         /// Path to the word embeddings model.
-        model: PathBuf
+        model: PathBuf,
+
+        #[arg(long, short, default_value_t = 65536)]
+        /// Maximal amount of tokens which can be encoded by the model
+        one_hot_tokens: usize,
+
+        #[arg(long, short, default_value_t = 128)]
+        /// Amount of dimensions in a word embedding.
+        embedding_size: usize
     },
 
     /// Compare words to each other using their embeddings.
@@ -102,7 +118,19 @@ impl EmbeddingsCLI {
                 }
             }
 
-            Self::Train { documents, tokens, model, lowercase, strip_punctuation, whitespace_tokens, remote_device, epochs, learn_rate } => {
+            Self::Train {
+                documents,
+                tokens,
+                model,
+                one_hot_tokens,
+                embedding_size,
+                lowercase,
+                strip_punctuation,
+                whitespace_tokens,
+                remote_device,
+                epochs,
+                learn_rate
+            } => {
                 let embeddings = database.canonicalize().unwrap_or(database);
                 let documents = documents.canonicalize().unwrap_or(documents);
                 let tokens = tokens.canonicalize().unwrap_or(tokens);
@@ -160,6 +188,8 @@ impl EmbeddingsCLI {
                     pub embeddings: WordEmbeddingsDatabase,
                     pub parser: DocumentsParser,
 
+                    pub model_one_hot_tokens: usize,
+                    pub model_embedding_size: usize,
                     pub model_path: PathBuf,
                     pub model_logs_folder_path: PathBuf,
 
@@ -223,8 +253,8 @@ impl EmbeddingsCLI {
 
                     println!("⏳ Opening the model...");
 
-                    let embeddings_model = WordEmbeddingModel::<Autodiff<B>>::load(&params.model_path, &device)
-                        .unwrap_or_else(|_| WordEmbeddingModel::<Autodiff<B>>::random(&device));
+                    let embeddings_model = WordEmbeddingModel::<Autodiff<B>>::load(params.model_one_hot_tokens, params.model_embedding_size, &params.model_path, &device)
+                        .unwrap_or_else(|_| WordEmbeddingModel::<Autodiff<B>>::random(params.model_one_hot_tokens, params.model_embedding_size, &device));
 
                     println!("⏳ Training the model...");
 
@@ -278,6 +308,8 @@ impl EmbeddingsCLI {
                         embeddings,
                         parser,
 
+                        model_one_hot_tokens: one_hot_tokens,
+                        model_embedding_size: embedding_size,
                         model_path: model,
                         model_logs_folder_path: model_logs_folder,
 
@@ -294,6 +326,8 @@ impl EmbeddingsCLI {
                         embeddings,
                         parser,
 
+                        model_one_hot_tokens: one_hot_tokens,
+                        model_embedding_size: embedding_size,
                         model_path: model,
                         model_logs_folder_path: model_logs_folder,
 
@@ -311,7 +345,7 @@ impl EmbeddingsCLI {
                 }
             }
 
-            Self::Update { tokens, model } => {
+            Self::Update { tokens, model, one_hot_tokens, embedding_size } => {
                 let embeddings = database.canonicalize().unwrap_or(database);
                 let tokens = tokens.canonicalize().unwrap_or(tokens);
                 let model = model.canonicalize().unwrap_or(model);
@@ -342,8 +376,8 @@ impl EmbeddingsCLI {
 
                 let device = WgpuDevice::default();
 
-                let embeddings_model = WordEmbeddingModel::<Autodiff<Wgpu>>::load(&model, &device)
-                    .unwrap_or_else(|_| WordEmbeddingModel::<Autodiff<Wgpu>>::random(&device));
+                let embeddings_model = WordEmbeddingModel::<Autodiff<Wgpu>>::load(one_hot_tokens, embedding_size, &model, &device)
+                    .unwrap_or_else(|_| WordEmbeddingModel::<Autodiff<Wgpu>>::random(one_hot_tokens, embedding_size, &device));
 
                 println!("⏳ Updating token embeddings...");
 

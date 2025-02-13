@@ -14,22 +14,27 @@ use crate::prelude::*;
 #[derive(Debug, Module)]
 pub struct WordEmbeddingModel<B: Backend> {
     encoder: Linear<B>,
-    decoder: Linear<B>
+    decoder: Linear<B>,
+    one_hot_tokens: usize,
+    embedding_size: usize
 }
 
 impl<B: Backend> WordEmbeddingModel<B> {
     /// Build new model with random weights.
-    pub fn random(device: &B::Device) -> Self {
+    pub fn random(one_hot_tokens: usize, embedding_size: usize, device: &B::Device) -> Self {
         Self {
-            encoder: LinearConfig::new(EMBEDDING_MAX_TOKENS, EMBEDDING_SIZE)
+            encoder: LinearConfig::new(one_hot_tokens, embedding_size)
                 .with_bias(false)
-                .with_initializer(Initializer::XavierNormal { gain: 1.0 })
+                .with_initializer(Initializer::XavierUniform { gain: 2.0 })
                 .init(device),
 
-            decoder: LinearConfig::new(EMBEDDING_SIZE, EMBEDDING_MAX_TOKENS)
+            decoder: LinearConfig::new(embedding_size, one_hot_tokens)
                 .with_bias(false)
-                .with_initializer(Initializer::XavierNormal { gain: 1.0 })
-                .init(device)
+                .with_initializer(Initializer::XavierUniform { gain: 2.0 })
+                .init(device),
+
+            one_hot_tokens,
+            embedding_size
         }
     }
 
@@ -41,16 +46,19 @@ impl<B: Backend> WordEmbeddingModel<B> {
     }
 
     /// Load model from a file.
-    pub fn load(file: impl AsRef<Path>, device: &B::Device) -> anyhow::Result<Self> {
+    pub fn load(one_hot_tokens: usize, embedding_size: usize, file: impl AsRef<Path>, device: &B::Device) -> anyhow::Result<Self> {
         let recorder = BinGzFileRecorder::<FullPrecisionSettings>::new();
 
-        Ok(Self::random(device).load_file(file.as_ref(), &recorder, device)?)
+        let model = Self::random(one_hot_tokens, embedding_size, device)
+            .load_file(file.as_ref(), &recorder, device)?;
+
+        Ok(model)
     }
 
     #[inline]
     /// Encode token into embedding tensor.
     pub fn encode(&self, token: usize, device: &B::Device) -> Tensor<B, 1, Float> {
-        self.encoder.forward(one_hot_tensor(&[token], EMBEDDING_MAX_TOKENS, device))
+        self.encoder.forward(one_hot_tensor(&[token], self.one_hot_tokens, device))
     }
 
     fn forward_batch(&self, samples: WordEmbeddingTrainSamplesBatch<B>) -> RegressionOutput<B> {
