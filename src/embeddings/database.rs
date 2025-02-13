@@ -102,7 +102,7 @@ impl Database {
             .map_err(|_| anyhow::anyhow!("Failed to lock sqlite connection"))?;
 
         let mut query = connection.prepare_cached("
-            SELECT embedding FROM embeddings
+            SELECT embeddings.embedding FROM embeddings
             INNER JOIN tokens
             ON embeddings.token_id = tokens.id
             WHERE tokens.value = ?1
@@ -126,29 +126,30 @@ impl Database {
         let connection = self.connection.lock()
             .map_err(|_| anyhow::anyhow!("Failed to lock sqlite connection"))?;
 
-        let mut rows = connection.prepare_cached("SELECT value FROM tokens")?
-            .query_map((), |row| row.get::<_, String>(0))?
-            .map(|token| -> anyhow::Result<_> {
-                let token = token?;
-                let embedding = self.query_embedding(&token)?;
+        let mut query = connection.prepare_cached("
+            SELECT tokens.value, embeddings.embedding
+            FROM tokens
+            INNER JOIN embeddings
+            ON embeddings.token_id = tokens.id
+        ")?;
 
-                Ok((token, embedding))
-            })
-            .flat_map(|row| {
-                match row {
-                    Ok((token, Some(embedding))) => Some(Ok((token, embedding))),
-                    Ok((_, None)) => None,
-                    Err(err) => Some(Err(err))
+        let mut rows = query.query_map((), |row: &rusqlite::Row| {
+            let token = row.get::<_, String>(0)?;
+            let embedding = row.get::<_, Vec<u8>>(1)?;
+
+            Ok((token, embedding))
+        })?.map(move |row| -> anyhow::Result<_> {
+            match row {
+                Ok((token, current_embedding)) => {
+                    let current_embedding = parse_embedding(&current_embedding)?;
+                    let similarity = cosine_similarity::<EMBEDDING_SIZE>(&current_embedding, embedding);
+
+                    Ok((token, similarity))
                 }
-            })
-            .map(|row| -> anyhow::Result<_> {
-                let (token, token_embedding) = row?;
 
-                Ok((token, cosine_similarity::<EMBEDDING_SIZE>(&token_embedding, embedding)))
-            })
-            .collect::<Result<Vec<_>, _>>()?;
-
-        drop(connection);
+                Err(err) => anyhow::bail!(err)
+            }
+        }).collect::<Result<Vec<_>, _>>()?;
 
         let Some(mut closest_token) = rows.pop() else {
             return Ok(None);

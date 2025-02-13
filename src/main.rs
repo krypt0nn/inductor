@@ -4,12 +4,14 @@ use colorful::Colorful;
 pub mod documents;
 pub mod tokenizer;
 pub mod embeddings;
+pub mod text_generator;
 pub mod cli;
 
 pub mod prelude {
     pub use super::documents::prelude::*;
     pub use super::tokenizer::prelude::*;
     pub use super::embeddings::prelude::*;
+    pub use super::text_generator::prelude::*;
 }
 
 #[global_allocator]

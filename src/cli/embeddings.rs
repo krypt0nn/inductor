@@ -193,12 +193,12 @@ impl EmbeddingsCLI {
 
                 let train_samples_dataset = DataLoaderBuilder::new(WordEmbeddingTrainSamplesBatcher)
                     .num_workers(4)
-                    .batch_size(64)
+                    .batch_size(16)
                     .build(train_samples_dataset);
 
                 let validate_samples_dataset = DataLoaderBuilder::new(WordEmbeddingTrainSamplesBatcher)
                     .num_workers(4)
-                    .batch_size(64)
+                    .batch_size(16)
                     .build(validate_samples_dataset);
 
                 println!("⏳ Opening the model...");
@@ -218,6 +218,7 @@ impl EmbeddingsCLI {
                     .metric_train_numeric(CpuMemory::new())
                     .metric_valid_numeric(CpuMemory::new())
                     .devices(vec![device.clone()])
+                    .grads_accumulation(4)
                     .num_epochs(epochs)
                     .summary()
                     .build(

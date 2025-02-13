@@ -6,7 +6,7 @@ use burn::nn::{Linear, LinearConfig};
 use burn::nn::Initializer;
 use burn::nn::loss::{MseLoss, Reduction};
 use burn::tensor::backend::AutodiffBackend;
-use burn::train::{TrainStep, TrainOutput, ValidStep, MultiLabelClassificationOutput};
+use burn::train::{TrainStep, TrainOutput, ValidStep, RegressionOutput};
 use burn::record::{BinGzFileRecorder, FullPrecisionSettings};
 
 use crate::prelude::*;
@@ -53,7 +53,7 @@ impl<B: Backend> WordEmbeddingModel<B> {
         self.encoder.forward(one_hot_tensor(&[token], EMBEDDING_MAX_TOKENS, device))
     }
 
-    fn forward_batch(&self, samples: WordEmbeddingTrainSamplesBatch<B>) -> MultiLabelClassificationOutput<B> {
+    fn forward_batch(&self, samples: WordEmbeddingTrainSamplesBatch<B>) -> RegressionOutput<B> {
         let embeddings = self.encoder.forward(samples.contexts);
         let predicted_targets = self.decoder.forward(embeddings);
 
@@ -63,21 +63,21 @@ impl<B: Backend> WordEmbeddingModel<B> {
             Reduction::Mean
         );
 
-        MultiLabelClassificationOutput::new(loss, predicted_targets, samples.targets.int())
+        RegressionOutput::new(loss, predicted_targets, samples.targets)
     }
 }
 
-impl<B: AutodiffBackend> TrainStep<WordEmbeddingTrainSamplesBatch<B>, MultiLabelClassificationOutput<B>> for WordEmbeddingModel<B> {
-    fn step(&self, samples: WordEmbeddingTrainSamplesBatch<B>) -> TrainOutput<MultiLabelClassificationOutput<B>> {
+impl<B: AutodiffBackend> TrainStep<WordEmbeddingTrainSamplesBatch<B>, RegressionOutput<B>> for WordEmbeddingModel<B> {
+    fn step(&self, samples: WordEmbeddingTrainSamplesBatch<B>) -> TrainOutput<RegressionOutput<B>> {
         let output = self.forward_batch(samples);
 
         TrainOutput::new(self, output.loss.backward(), output)
     }
 }
 
-impl<B: Backend> ValidStep<WordEmbeddingTrainSamplesBatch<B>, MultiLabelClassificationOutput<B>> for WordEmbeddingModel<B> {
+impl<B: Backend> ValidStep<WordEmbeddingTrainSamplesBatch<B>, RegressionOutput<B>> for WordEmbeddingModel<B> {
     #[inline]
-    fn step(&self, samples: WordEmbeddingTrainSamplesBatch<B>) -> MultiLabelClassificationOutput<B> {
+    fn step(&self, samples: WordEmbeddingTrainSamplesBatch<B>) -> RegressionOutput<B> {
         self.forward_batch(samples)
     }
 }

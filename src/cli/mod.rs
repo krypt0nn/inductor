@@ -5,6 +5,7 @@ use clap::Parser;
 pub mod documents;
 pub mod tokens;
 pub mod embeddings;
+pub mod text_generator;
 
 #[derive(Parser)]
 pub enum CLI {
@@ -54,6 +55,16 @@ pub enum CLI {
 
         #[command(subcommand)]
         command: embeddings::EmbeddingsCLI
+    },
+
+    /// Manage text generation model.
+    TextGenerator {
+        #[arg(long, short)]
+        /// Path to the text generation model.
+        model: PathBuf,
+
+        #[command(subcommand)]
+        command: text_generator::TextGeneratorCLI
     }
 }
 
@@ -63,7 +74,8 @@ impl CLI {
         match self {
             Self::Documents { database, cache_size, command } => command.execute(database, cache_size),
             Self::Tokens { database, cache_size, command } => command.execute(database, cache_size),
-            Self::Embeddings { database, cache_size, command } => command.execute(database, cache_size)
+            Self::Embeddings { database, cache_size, command } => command.execute(database, cache_size),
+            Self::TextGenerator { model, command } => command.execute(model)
         }
     }
 }

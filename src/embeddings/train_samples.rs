@@ -6,6 +6,13 @@ use burn::data::dataset::Dataset;
 use crate::prelude::*;
 
 #[derive(Debug, Clone)]
+/// Single word embedding train sample.
+pub struct WordEmbeddingTrainSample<B: Backend> {
+    pub context: Tensor<B, 1, Float>,
+    pub target: Tensor<B, 1, Float>
+}
+
+#[derive(Debug, Clone)]
 /// Read word embedding train samples from the parsed document.
 pub struct WordEmbeddingsTrainSamplesDataset<B: Backend> {
     tokens: Arc<Vec<usize>>,
@@ -47,13 +54,6 @@ impl<B: Backend> WordEmbeddingsTrainSamplesDataset<B> {
 
         self
     }
-}
-
-#[derive(Debug, Clone)]
-/// Single word embedding train sample.
-pub struct WordEmbeddingTrainSample<B: Backend> {
-    pub context: Tensor<B, 1, Float>,
-    pub target: Tensor<B, 1, Float>
 }
 
 impl<B: Backend> Dataset<WordEmbeddingTrainSample<B>> for WordEmbeddingsTrainSamplesDataset<B> {
