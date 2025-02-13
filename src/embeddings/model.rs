@@ -60,7 +60,7 @@ impl<B: Backend> WordEmbeddingModel<B> {
         let loss = MseLoss::new().forward(
             predicted_targets.clone(),
             samples.targets.clone(),
-            Reduction::Mean
+            Reduction::Sum
         );
 
         RegressionOutput::new(loss, predicted_targets, samples.targets)

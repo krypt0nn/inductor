@@ -70,7 +70,7 @@ impl<B: Backend> TextGenerationModel<B> {
         let loss = MseLoss::new().forward(
             predicted_embedding.clone(),
             samples.targets.clone(),
-            Reduction::Mean
+            Reduction::Sum
         );
 
         RegressionOutput::new(loss, predicted_embedding, samples.targets)
