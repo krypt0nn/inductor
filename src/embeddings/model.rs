@@ -23,12 +23,12 @@ impl<B: Backend> WordEmbeddingModel<B> {
         Self {
             encoder: LinearConfig::new(EMBEDDING_MAX_TOKENS, EMBEDDING_SIZE)
                 .with_bias(false)
-                .with_initializer(Initializer::Uniform { min: -1.0, max: 1.0 })
+                .with_initializer(Initializer::XavierNormal { gain: 1.0 })
                 .init(device),
 
             decoder: LinearConfig::new(EMBEDDING_SIZE, EMBEDDING_MAX_TOKENS)
                 .with_bias(false)
-                .with_initializer(Initializer::Uniform { min: -1.0, max: 1.0 })
+                .with_initializer(Initializer::XavierNormal { gain: 1.0 })
                 .init(device)
         }
     }
