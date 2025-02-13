@@ -37,7 +37,7 @@ pub enum EmbeddingsCLI {
         model: PathBuf,
 
         #[arg(long, short, default_value_t = 65536)]
-        /// Maximal amount of tokens which can be encoded by the model
+        /// Maximal amount of tokens which can be encoded by the model.
         one_hot_tokens: usize,
 
         #[arg(long, short, default_value_t = 128)]

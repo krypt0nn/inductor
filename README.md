@@ -74,6 +74,8 @@ inductor embeddings --database embeddings.db create
 
 | Optional flags        | Meaning                                                       |
 | --------------------- | ------------------------------------------------------------- |
+| `--one-hot-tokens`    | Maximal amount of tokens which can be encoded by the model    |
+| `--embedding-size`    | Amount of dimensions in a word embedding                      |
 | `--lowercase`         | Convert document text to lowercase                            |
 | `--strip-punctuation` | Remove all punctuation characters. Can easily break your text |
 | `--whitespace-tokens` | Make whitespace characters separate tokens                    |
@@ -90,6 +92,11 @@ inductor embeddings --database embeddings.db train --documents documents.db --to
 After model's training embeddings database is updated automatically, but if you
 downloaded the pre-trained model - you can use this method and your own tokens database
 to create word embeddings database.
+
+| Optional flags        | Meaning                                                    |
+| --------------------- | ---------------------------------------------------------- |
+| `--one-hot-tokens`    | Maximal amount of tokens which can be encoded by the model |
+| `--embedding-size`    | Amount of dimensions in a word embedding                   |
 
 ```bash
 inductor embeddings --database embeddings.db update --tokens tokens.db --model embeddings-model
