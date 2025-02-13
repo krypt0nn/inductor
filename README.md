@@ -72,16 +72,17 @@ inductor embeddings --database embeddings.db create
 
 ### Train the model on given documents
 
-| Optional flags        | Meaning                                                       |
-| --------------------- | ------------------------------------------------------------- |
-| `--one-hot-tokens`    | Maximal amount of tokens which can be encoded by the model    |
-| `--embedding-size`    | Amount of dimensions in a word embedding                      |
-| `--lowercase`         | Convert document text to lowercase                            |
-| `--strip-punctuation` | Remove all punctuation characters. Can easily break your text |
-| `--whitespace-tokens` | Make whitespace characters separate tokens                    |
-| `--remote-device`     | URL to a remote device. Can be set multiple times             |
-| `--epochs`            | Amount of epochs to train the model                           |
-| `--learn-rate`        | Rate of the model's training. Should be around 0.003          |
+| Optional flags               | Meaning                                                                           |
+| ---------------------------- | --------------------------------------------------------------------------------- |
+| `--one-hot-tokens`           | Maximal amount of tokens which can be encoded by the model                        |
+| `--embedding-size`           | Amount of dimensions in a word embedding                                          |
+| `--embedding-context-radius` | Amount or tokens to the left and right of the current one used to train the model |
+| `--lowercase`                | Convert document text to lowercase                                                |
+| `--strip-punctuation`        | Remove all punctuation characters. Can easily break your text                     |
+| `--whitespace-tokens`        | Make whitespace characters separate tokens                                        |
+| `--remote-device`            | URL to a remote device. Can be set multiple times                                 |
+| `--epochs`                   | Amount of epochs to train the model                                               |
+| `--learn-rate`               | Rate of the model's training. Should be around 0.003                              |
 
 ```bash
 inductor embeddings --database embeddings.db train --documents documents.db --tokens tokens.db --model embeddings-model

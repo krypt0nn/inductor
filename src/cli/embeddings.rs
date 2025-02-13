@@ -44,6 +44,10 @@ pub enum EmbeddingsCLI {
         /// Amount of dimensions in a word embedding.
         embedding_size: usize,
 
+        #[arg(long, default_value_t = 3)]
+        /// Amount or tokens to the left and right of the current one used to train the model.
+        embedding_context_radius: usize,
+
         #[arg(long)]
         /// Convert content of the documents to lowercase.
         lowercase: bool,
@@ -124,6 +128,7 @@ impl EmbeddingsCLI {
                 model,
                 one_hot_tokens,
                 embedding_size,
+                embedding_context_radius,
                 lowercase,
                 strip_punctuation,
                 whitespace_tokens,
@@ -190,6 +195,7 @@ impl EmbeddingsCLI {
 
                     pub model_one_hot_tokens: usize,
                     pub model_embedding_size: usize,
+                    pub model_embedding_context_radius: usize,
                     pub model_path: PathBuf,
                     pub model_logs_folder_path: PathBuf,
 
@@ -213,6 +219,8 @@ impl EmbeddingsCLI {
                             document.clone(),
                             &params.parser,
                             &params.tokens,
+                            params.model_one_hot_tokens,
+                            params.model_embedding_context_radius,
                             device.clone()
                         )?;
 
@@ -220,6 +228,8 @@ impl EmbeddingsCLI {
                             document,
                             &params.parser,
                             &params.tokens,
+                            params.model_one_hot_tokens,
+                            params.model_embedding_context_radius,
                             device.clone()
                         )?;
 
@@ -310,6 +320,7 @@ impl EmbeddingsCLI {
 
                         model_one_hot_tokens: one_hot_tokens,
                         model_embedding_size: embedding_size,
+                        model_embedding_context_radius: embedding_context_radius,
                         model_path: model,
                         model_logs_folder_path: model_logs_folder,
 
@@ -328,6 +339,7 @@ impl EmbeddingsCLI {
 
                         model_one_hot_tokens: one_hot_tokens,
                         model_embedding_size: embedding_size,
+                        model_embedding_context_radius: embedding_context_radius,
                         model_path: model,
                         model_logs_folder_path: model_logs_folder,
 
@@ -434,7 +446,7 @@ impl EmbeddingsCLI {
                     let mut best_tokens = Vec::new();
 
                     embeddings.for_each(|token, embedding| {
-                        best_tokens.push((token, cosine_similarity::<EMBEDDING_SIZE>(&target_embedding, &embedding)));
+                        best_tokens.push((token, cosine_similarity(&target_embedding, &embedding)));
 
                         Ok(())
                     })?;

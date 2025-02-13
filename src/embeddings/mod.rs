@@ -7,15 +7,6 @@ pub mod train_samples;
 pub mod train_batches;
 pub mod model;
 
-/// Maximal amount of tokens which can be learned by the word embeddings model.
-pub const EMBEDDING_MAX_TOKENS: usize = 65536;
-
-/// Amount of tokens around the target one to train embeddings model on.
-pub const EMBEDDING_CONTEXT_RADIUS: usize = 3;
-
-/// Amount of dimensions in the word embedding vector.
-pub const EMBEDDING_SIZE: usize = 128;
-
 pub mod prelude {
     pub use super::database::Database as WordEmbeddingsDatabase;
 
@@ -35,23 +26,19 @@ pub mod prelude {
         cosine_similarity,
         one_hot_tensor
     };
-
-    pub use super::{
-        EMBEDDING_MAX_TOKENS,
-        EMBEDDING_CONTEXT_RADIUS,
-        EMBEDDING_SIZE
-    };
 }
 
 /// Calculate cosine similarity between two vectors.
 ///
 /// Return value in `[-1.0, 1.0]` range where 1.0 means fully equal.
-pub fn cosine_similarity<const N: usize>(word_1: &[f32], word_2: &[f32]) -> f32 {
+pub fn cosine_similarity(word_1: &[f32], word_2: &[f32]) -> f32 {
     let mut distance = 0.0;
     let mut len_1 = 0.0;
     let mut len_2 = 0.0;
 
-    for i in 0..N {
+    let n = std::cmp::max(word_1.len(), word_2.len());
+
+    for i in 0..n {
         let word_1 = word_1.get(i).copied().unwrap_or(0.0);
         let word_2 = word_2.get(i).copied().unwrap_or(0.0);
 

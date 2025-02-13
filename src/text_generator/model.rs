@@ -63,7 +63,7 @@ impl<B: Backend> TextGenerationModel<B> {
             device,
 
             history: input.into_iter()
-                .map(|tensor| tensor.reshape([1, EMBEDDING_SIZE]))
+                .map(|tensor| tensor.reshape([1, self.embedding_size]))
                 .collect(),
 
             state: None

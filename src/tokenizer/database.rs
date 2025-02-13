@@ -3,8 +3,6 @@ use std::sync::{Arc, Mutex};
 
 use rusqlite::Connection;
 
-use crate::prelude::*;
-
 #[derive(Debug, Clone)]
 /// SQLite database for storing word tokens.
 pub struct Database {
@@ -19,19 +17,18 @@ impl Database {
 
         connection.execute(&format!("PRAGMA cache_size = {cache_size};"), ())?;
 
-        connection.execute_batch(&format!("
+        connection.execute_batch("
             CREATE TABLE IF NOT EXISTS tokens (
                 id    INTEGER NOT NULL,
                 value TEXT UNIQUE NOT NULL,
 
-                PRIMARY KEY (id),
-                CONSTRAINT id_max CHECK(id < {EMBEDDING_MAX_TOKENS})
+                PRIMARY KEY (id)
             );
 
             CREATE INDEX IF NOT EXISTS idx_tokens_value on tokens (value);
 
             INSERT OR IGNORE INTO tokens (id, value) VALUES (0, '');
-        "))?;
+        ")?;
 
         Ok(Self {
             connection: Arc::new(Mutex::new(connection))

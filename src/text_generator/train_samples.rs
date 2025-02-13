@@ -41,6 +41,8 @@ pub struct TextGeneratorTrainSamplesDataset<B: Backend> {
     documents: Arc<Box<dyn Dataset<Document>>>,
     embeddings: Arc<WordEmbeddingsDatabase>,
     parser: DocumentsParser,
+    embedding_size: usize,
+    context_tokens_num: usize,
     device: B::Device
 }
 
@@ -50,12 +52,16 @@ impl<B: Backend> TextGeneratorTrainSamplesDataset<B> {
         documents: Arc<Box<dyn Dataset<Document>>>,
         embeddings: Arc<WordEmbeddingsDatabase>,
         parser: DocumentsParser,
+        embedding_size: usize,
+        context_tokens_num: usize,
         device: B::Device
     ) -> Self {
         Self {
             documents,
             embeddings,
             parser,
+            embedding_size,
+            context_tokens_num,
             device
         }
     }
@@ -69,7 +75,7 @@ impl<B: Backend> Dataset<TextGeneratorTrainSample<B>> for TextGeneratorTrainSamp
             .map(|token| {
                 match self.embeddings.query_embedding(token) {
                     Ok(Some(embedding)) => Tensor::from_floats(embedding.as_slice(), &self.device),
-                    _ => Tensor::zeros([EMBEDDING_SIZE], &self.device)
+                    _ => Tensor::zeros([self.embedding_size], &self.device)
                 }
             })
             .collect::<Vec<Tensor<B, 1, Float>>>();
@@ -78,9 +84,9 @@ impl<B: Backend> Dataset<TextGeneratorTrainSample<B>> for TextGeneratorTrainSamp
 
         let n = context_embeddings.len();
 
-        if n <= TEXT_GENERATOR_CONTEXT_TOKENS_NUM {
+        if n <= self.context_tokens_num {
             let mut zero_padding = vec![
-                Tensor::zeros([(TEXT_GENERATOR_CONTEXT_TOKENS_NUM - n) * EMBEDDING_SIZE], &self.device)
+                Tensor::zeros([(self.context_tokens_num - n) * self.embedding_size], &self.device)
             ];
 
             zero_padding.extend(context_embeddings);
@@ -94,12 +100,12 @@ impl<B: Backend> Dataset<TextGeneratorTrainSample<B>> for TextGeneratorTrainSamp
         }
 
         else {
-            let m = n - TEXT_GENERATOR_CONTEXT_TOKENS_NUM;
+            let m = n - self.context_tokens_num;
 
             let mut context = Vec::with_capacity(m);
 
             for i in 0..m {
-                let tensor = Tensor::cat(context_embeddings[i..i + TEXT_GENERATOR_CONTEXT_TOKENS_NUM].to_vec(), 0);
+                let tensor = Tensor::cat(context_embeddings[i..i + self.context_tokens_num].to_vec(), 0);
 
                 context.push(tensor.reshape([1, -1]));
             }

@@ -166,6 +166,8 @@ impl TextGeneratorCLI {
                         params.documents.clone(),
                         params.embeddings.clone(),
                         params.parser,
+                        params.model_embedding_size,
+                        params.model_context_tokens_num,
                         device.clone()
                     );
 
@@ -173,6 +175,8 @@ impl TextGeneratorCLI {
                         params.documents.clone(),
                         params.embeddings.clone(),
                         params.parser,
+                        params.model_embedding_size,
+                        params.model_context_tokens_num,
                         device.clone()
                     );
 

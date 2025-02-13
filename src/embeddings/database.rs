@@ -142,7 +142,7 @@ impl Database {
             match row {
                 Ok((token, current_embedding)) => {
                     let current_embedding = parse_embedding(&current_embedding)?;
-                    let similarity = cosine_similarity::<EMBEDDING_SIZE>(&current_embedding, embedding);
+                    let similarity = cosine_similarity(&current_embedding, embedding);
 
                     Ok((token, similarity))
                 }

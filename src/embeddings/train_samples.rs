@@ -16,8 +16,8 @@ pub struct WordEmbeddingTrainSample<B: Backend> {
 /// Read word embedding train samples from the parsed document.
 pub struct WordEmbeddingsTrainSamplesDataset<B: Backend> {
     tokens: Arc<Vec<usize>>,
+    one_hot_tokens: usize,
     context_radius: usize,
-    one_hot_length: usize,
     device: B::Device
 }
 
@@ -27,6 +27,8 @@ impl<B: Backend> WordEmbeddingsTrainSamplesDataset<B> {
         document: Document,
         parser: &DocumentsParser,
         tokens_db: &TokensDatabase,
+        one_hot_tokens: usize,
+        context_radius: usize,
         device: B::Device
     ) -> anyhow::Result<Self> {
         let tokens = parser.read_document(document)
@@ -35,8 +37,8 @@ impl<B: Backend> WordEmbeddingsTrainSamplesDataset<B> {
 
         Ok(Self {
             tokens: Arc::new(tokens),
-            context_radius: EMBEDDING_CONTEXT_RADIUS,
-            one_hot_length: EMBEDDING_MAX_TOKENS,
+            one_hot_tokens,
+            context_radius,
             device
         })
     }
@@ -49,8 +51,8 @@ impl<B: Backend> WordEmbeddingsTrainSamplesDataset<B> {
     }
 
     #[inline]
-    pub fn with_one_hot_length(mut self, one_hot_length: usize) -> Self {
-        self.one_hot_length = one_hot_length;
+    pub fn with_one_hot_tokens(mut self, one_hot_tokens: usize) -> Self {
+        self.one_hot_tokens = one_hot_tokens;
 
         self
     }
@@ -69,8 +71,8 @@ impl<B: Backend> Dataset<WordEmbeddingTrainSample<B>> for WordEmbeddingsTrainSam
         context[self.context_radius..].copy_from_slice(&self.tokens[i + 1..i + self.context_radius + 1]);
 
         Some(WordEmbeddingTrainSample {
-            context: one_hot_tensor(&context, self.one_hot_length, &self.device),
-            target: one_hot_tensor(&[target], self.one_hot_length, &self.device)
+            context: one_hot_tensor(&context, self.one_hot_tokens, &self.device),
+            target: one_hot_tensor(&[target], self.one_hot_tokens, &self.device)
         })
     }
 
