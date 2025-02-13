@@ -11,7 +11,7 @@ pub mod model;
 pub const EMBEDDING_MAX_TOKENS: usize = 65536;
 
 /// Amount of tokens around the target one to train embeddings model on.
-pub const EMBEDDING_CONTEXT_RADIUS: usize = 6;
+pub const EMBEDDING_CONTEXT_RADIUS: usize = 4;
 
 /// Amount of dimensions in the word embedding vector.
 pub const EMBEDDING_SIZE: usize = 32;
