@@ -6,17 +6,14 @@ use clap::Parser;
 use colorful::Colorful;
 use rand::SeedableRng;
 
-use burn::backend::{Autodiff, Wgpu, wgpu::WgpuDevice};
+use burn::prelude::*;
+use burn::backend::{Autodiff, Wgpu, wgpu::WgpuDevice, RemoteBackend, remote::RemoteDevice};
 use burn::data::dataloader::{Dataset, DataLoaderBuilder};
 use burn::data::dataset::transform::{ComposedDataset, ShuffledDataset, PartialDataset};
 use burn::train::LearnerBuilder;
 use burn::train::metric::{LossMetric, CpuUse, CpuMemory};
 use burn::optim::AdamWConfig;
-use burn::lr_scheduler::cosine::CosineAnnealingLrSchedulerConfig;
-
-type Backend = Wgpu;
-type AutodiffBackend = Autodiff<Backend>;
-type Device = WgpuDevice;
+use burn::lr_scheduler::constant::ConstantLr;
 
 use crate::prelude::*;
 
@@ -50,6 +47,10 @@ pub enum EmbeddingsCLI {
         #[arg(long, short)]
         /// Path to the word embeddings model.
         model: PathBuf,
+
+        #[arg(long, short)]
+        /// Address of remote device used for training.
+        remote_device: Vec<String>,
 
         #[arg(long, short, default_value_t = 10)]
         /// Number of epochs to train the word embeddings model.
@@ -101,7 +102,7 @@ impl EmbeddingsCLI {
                 }
             }
 
-            Self::Train { documents, lowercase, strip_punctuation, whitespace_tokens, tokens, model, epochs, learn_rate } => {
+            Self::Train { documents, lowercase, strip_punctuation, whitespace_tokens, tokens, model, remote_device, epochs, learn_rate } => {
                 let embeddings = database.canonicalize().unwrap_or(database);
                 let documents = documents.canonicalize().unwrap_or(documents);
                 let tokens = tokens.canonicalize().unwrap_or(tokens);
@@ -151,106 +152,163 @@ impl EmbeddingsCLI {
                     }
                 };
 
-                println!("⏳ Preparing training datasets...");
-
                 let parser = DocumentsParser::new(lowercase, strip_punctuation, whitespace_tokens);
-                let device = Device::default();
 
-                // Backend::seed(fastrand::u64(..));
-                // AutodiffBackend::seed(fastrand::u64(..));
+                struct TrainParams<B: Backend> {
+                    pub documents: DocumentsDatabase,
+                    pub tokens: TokensDatabase,
+                    pub embeddings: WordEmbeddingsDatabase,
+                    pub parser: DocumentsParser,
 
-                let mut train_samples_dataset = Vec::new();
-                let mut validate_samples_dataset = Vec::new();
+                    pub model_path: PathBuf,
+                    pub model_logs_folder_path: PathBuf,
 
-                documents.for_each(|document| {
-                    let train_dataset = WordEmbeddingsTrainSamplesDataset::<AutodiffBackend>::from_document(
-                        document.clone(),
-                        &parser,
-                        &tokens,
-                        device.clone()
-                    )?;
+                    pub devices: Vec<B::Device>,
+                    pub epochs: usize,
+                    pub learn_rate: f64
+                }
 
-                    let validate_dataset = WordEmbeddingsTrainSamplesDataset::<Backend>::from_document(
-                        document,
-                        &parser,
-                        &tokens,
-                        device.clone()
-                    )?;
+                fn train<B: Backend>(params: TrainParams<B>) -> anyhow::Result<()> {
+                    let device = params.devices.first()
+                        .cloned()
+                        .ok_or_else(|| anyhow::anyhow!("No devices supplied"))?;
 
-                    train_samples_dataset.push(train_dataset);
-                    validate_samples_dataset.push(validate_dataset);
+                    println!("⏳ Preparing training datasets...");
+
+                    let mut train_samples_dataset = Vec::new();
+                    let mut validate_samples_dataset = Vec::new();
+
+                    params.documents.for_each(|document| {
+                        let train_dataset = WordEmbeddingsTrainSamplesDataset::<Autodiff<B>>::from_document(
+                            document.clone(),
+                            &params.parser,
+                            &params.tokens,
+                            device.clone()
+                        )?;
+
+                        let validate_dataset = WordEmbeddingsTrainSamplesDataset::<B>::from_document(
+                            document,
+                            &params.parser,
+                            &params.tokens,
+                            device.clone()
+                        )?;
+
+                        train_samples_dataset.push(train_dataset);
+                        validate_samples_dataset.push(validate_dataset);
+
+                        Ok(())
+                    })?;
+
+                    let mut rng = rand::rngs::StdRng::seed_from_u64(fastrand::u64(..));
+
+                    let train_samples_dataset = ComposedDataset::new(train_samples_dataset);
+                    let train_samples_dataset = ShuffledDataset::new(train_samples_dataset, &mut rng);
+
+                    let validate_samples_dataset = ComposedDataset::new(validate_samples_dataset);
+                    let validate_samples_dataset = ShuffledDataset::new(validate_samples_dataset, &mut rng);
+
+                    let validate_dataset_len = (train_samples_dataset.len() as f32 * 0.15) as usize;
+
+                    let validate_samples_dataset = PartialDataset::new(validate_samples_dataset, 0, validate_dataset_len);
+
+                    let train_samples_dataset = DataLoaderBuilder::new(WordEmbeddingTrainSamplesBatcher)
+                        .num_workers(4)
+                        .batch_size(32)
+                        .build(train_samples_dataset);
+
+                    let validate_samples_dataset = DataLoaderBuilder::new(WordEmbeddingTrainSamplesBatcher)
+                        .num_workers(4)
+                        .batch_size(32)
+                        .build(validate_samples_dataset);
+
+                    println!("⏳ Opening the model...");
+
+                    let embeddings_model = WordEmbeddingModel::<Autodiff<B>>::load(&params.model_path, &device)
+                        .unwrap_or_else(|_| WordEmbeddingModel::<Autodiff<B>>::random(&device));
+
+                    println!("⏳ Training the model...");
+
+                    let learner = LearnerBuilder::new(params.model_logs_folder_path)
+                        // .metric_train_numeric(AccuracyMetric::new())
+                        // .metric_valid_numeric(AccuracyMetric::new())
+                        .metric_train_numeric(LossMetric::new())
+                        .metric_valid_numeric(LossMetric::new())
+                        .metric_train_numeric(CpuUse::new())
+                        .metric_valid_numeric(CpuUse::new())
+                        .metric_train_numeric(CpuMemory::new())
+                        .metric_valid_numeric(CpuMemory::new())
+                        .devices(params.devices)
+                        .grads_accumulation(4)
+                        .num_epochs(params.epochs)
+                        .summary()
+                        .build(
+                            embeddings_model,
+                            AdamWConfig::new().init(),
+                            ConstantLr::new(params.learn_rate)
+                        );
+
+                    let embeddings_model = learner.fit(train_samples_dataset, validate_samples_dataset);
+
+                    println!("{}", "✅ Model trained".green());
+                    println!("⏳ Updating token embeddings...");
+
+                    let tokens = params.tokens.for_each(|token_id, token| {
+                        let embedding = embeddings_model.encode(token_id as usize, &device)
+                            .to_data();
+
+                        let embedding = embedding.as_slice().map_err(|err| anyhow::anyhow!("Failed to cast tensor into floats slice: {err:?}"))?;
+
+                        params.embeddings.insert_embedding(token, embedding)
+                    })?;
+
+                    println!("✅ Updated {} embeddings", tokens.to_string().yellow());
+                    println!("⏳ Saving the model...");
+
+                    embeddings_model.save(params.model_path)?;
+
+                    println!("{}", "✅ Model saved".green());
 
                     Ok(())
-                })?;
+                }
 
-                let mut rng = rand::rngs::StdRng::seed_from_u64(fastrand::u64(..));
+                let result = if remote_device.is_empty() {
+                    train::<Wgpu>(TrainParams {
+                        documents,
+                        tokens,
+                        embeddings,
+                        parser,
 
-                let train_samples_dataset = ComposedDataset::new(train_samples_dataset);
-                let train_samples_dataset = ShuffledDataset::new(train_samples_dataset, &mut rng);
+                        model_path: model,
+                        model_logs_folder_path: model_logs_folder,
 
-                let validate_samples_dataset = ComposedDataset::new(validate_samples_dataset);
-                let validate_samples_dataset = ShuffledDataset::new(validate_samples_dataset, &mut rng);
+                        devices: vec![WgpuDevice::default()],
+                        epochs,
+                        learn_rate
+                    })
+                }
 
-                let validate_dataset_len = (train_samples_dataset.len() as f32 * 0.15) as usize;
+                else {
+                    train::<RemoteBackend>(TrainParams {
+                        documents,
+                        tokens,
+                        embeddings,
+                        parser,
 
-                let validate_samples_dataset = PartialDataset::new(validate_samples_dataset, 0, validate_dataset_len);
+                        model_path: model,
+                        model_logs_folder_path: model_logs_folder,
 
-                let train_samples_dataset = DataLoaderBuilder::new(WordEmbeddingTrainSamplesBatcher)
-                    .num_workers(4)
-                    .batch_size(32)
-                    .build(train_samples_dataset);
+                        devices: remote_device.iter()
+                            .map(|url| RemoteDevice::new(url))
+                            .collect(),
 
-                let validate_samples_dataset = DataLoaderBuilder::new(WordEmbeddingTrainSamplesBatcher)
-                    .num_workers(4)
-                    .batch_size(32)
-                    .build(validate_samples_dataset);
+                        epochs,
+                        learn_rate
+                    })
+                };
 
-                println!("⏳ Opening the model...");
-
-                let embeddings_model = WordEmbeddingModel::<AutodiffBackend>::load(&model, &device)
-                    .unwrap_or_else(|_| WordEmbeddingModel::<AutodiffBackend>::random(&device));
-
-                println!("⏳ Training the model...");
-
-                let learner = LearnerBuilder::new(model_logs_folder)
-                    // .metric_train_numeric(AccuracyMetric::new())
-                    // .metric_valid_numeric(AccuracyMetric::new())
-                    .metric_train_numeric(LossMetric::new())
-                    .metric_valid_numeric(LossMetric::new())
-                    .metric_train_numeric(CpuUse::new())
-                    .metric_valid_numeric(CpuUse::new())
-                    .metric_train_numeric(CpuMemory::new())
-                    .metric_valid_numeric(CpuMemory::new())
-                    .devices(vec![device.clone()])
-                    .grads_accumulation(4)
-                    .num_epochs(epochs)
-                    .summary()
-                    .build(
-                        embeddings_model,
-                        AdamWConfig::new().init(),
-                        CosineAnnealingLrSchedulerConfig::new(learn_rate, 10).init().unwrap()
-                    );
-
-                let embeddings_model = learner.fit(train_samples_dataset, validate_samples_dataset);
-
-                println!("{}", "✅ Model trained".green());
-                println!("⏳ Updating token embeddings...");
-
-                let tokens = tokens.for_each(|token_id, token| {
-                    let embedding = embeddings_model.encode(token_id as usize, &device)
-                        .to_data();
-
-                    let embedding = embedding.as_slice().map_err(|err| anyhow::anyhow!("Failed to cast tensor into floats slice: {err:?}"))?;
-
-                    embeddings.insert_embedding(token, embedding)
-                })?;
-
-                println!("✅ Updated {} embeddings", tokens.to_string().yellow());
-                println!("⏳ Saving the model...");
-
-                embeddings_model.save(model)?;
-
-                println!("{}", "✅ Model saved".green());
+                if let Err(err) = result {
+                    eprintln!("{}", format!("🧯 Failed to train the model: {err}").red());
+                }
             }
 
             Self::Update { tokens, model } => {
@@ -282,10 +340,10 @@ impl EmbeddingsCLI {
 
                 println!("⏳ Opening the model...");
 
-                let device = Device::default();
+                let device = WgpuDevice::default();
 
-                let embeddings_model = WordEmbeddingModel::<AutodiffBackend>::load(&model, &device)
-                    .unwrap_or_else(|_| WordEmbeddingModel::<AutodiffBackend>::random(&device));
+                let embeddings_model = WordEmbeddingModel::<Autodiff<Wgpu>>::load(&model, &device)
+                    .unwrap_or_else(|_| WordEmbeddingModel::<Autodiff<Wgpu>>::random(&device));
 
                 println!("⏳ Updating token embeddings...");
 

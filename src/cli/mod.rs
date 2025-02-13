@@ -1,6 +1,9 @@
 use std::path::PathBuf;
 
 use clap::Parser;
+use colorful::Colorful;
+
+use burn::backend::{Wgpu, wgpu::WgpuDevice};
 
 pub mod documents;
 pub mod tokens;
@@ -65,6 +68,12 @@ pub enum CLI {
 
         #[command(subcommand)]
         command: text_generator::TextGeneratorCLI
+    },
+
+    /// Host your device for remote computations.
+    Serve {
+        #[arg(long, short, default_value_t = 3000)]
+        port: u16
     }
 }
 
@@ -75,7 +84,17 @@ impl CLI {
             Self::Documents { database, cache_size, command } => command.execute(database, cache_size),
             Self::Tokens { database, cache_size, command } => command.execute(database, cache_size),
             Self::Embeddings { database, cache_size, command } => command.execute(database, cache_size),
-            Self::TextGenerator { model, command } => command.execute(model)
+            Self::TextGenerator { model, command } => command.execute(model),
+
+            Self::Serve { port } => {
+                let device = WgpuDevice::default();
+
+                println!("🚀 Hosting your GPU under {}", format!("ws://0.0.0.0:{port}").yellow());
+
+                burn::server::start::<Wgpu>(device, port);
+
+                Ok(())
+            }
         }
     }
 }

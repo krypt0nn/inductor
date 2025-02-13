@@ -7,17 +7,13 @@ use colorful::Colorful;
 use rand::SeedableRng;
 
 use burn::prelude::*;
-use burn::backend::{Autodiff, Wgpu, wgpu::WgpuDevice};
+use burn::backend::{Autodiff, Wgpu, wgpu::WgpuDevice, RemoteBackend, remote::RemoteDevice};
 use burn::data::dataloader::{Dataset, DataLoaderBuilder};
 use burn::data::dataset::transform::{ShuffledDataset, PartialDataset};
 use burn::train::LearnerBuilder;
 use burn::train::metric::{LossMetric, CpuUse, CpuMemory};
 use burn::optim::AdamWConfig;
-use burn::lr_scheduler::cosine::CosineAnnealingLrSchedulerConfig;
-
-type Backend = Wgpu;
-type AutodiffBackend = Autodiff<Backend>;
-type Device = WgpuDevice;
+use burn::lr_scheduler::constant::ConstantLr;
 
 use crate::prelude::*;
 
@@ -50,6 +46,10 @@ pub enum TextGeneratorCLI {
         #[arg(long, short)]
         /// Save whitespace characters as tokens.
         whitespace_tokens: bool,
+
+        #[arg(long, short)]
+        /// Address of remote device used for training.
+        remote_device: Vec<String>,
 
         #[arg(long, default_value_t = 10)]
         /// Number of epochs to train the word embeddings model.
@@ -97,7 +97,7 @@ impl TextGeneratorCLI {
     #[inline]
     pub fn execute(self, model: PathBuf) -> anyhow::Result<()> {
         match self {
-            Self::Train { documents, embeddings, cache_size, lowercase, strip_punctuation, whitespace_tokens, epochs, learn_rate } => {
+            Self::Train { documents, embeddings, cache_size, lowercase, strip_punctuation, whitespace_tokens, remote_device, epochs, learn_rate } => {
                 let documents = documents.canonicalize().unwrap_or(documents);
                 let embeddings = embeddings.canonicalize().unwrap_or(embeddings);
 
@@ -136,81 +136,135 @@ impl TextGeneratorCLI {
                     }
                 };
 
-                println!("⏳ Preparing training datasets...");
-
                 let parser = DocumentsParser::new(lowercase, strip_punctuation, whitespace_tokens);
-                let device = Device::default();
 
-                // Backend::seed(fastrand::u64(..));
-                // AutodiffBackend::seed(fastrand::u64(..));
+                struct TrainParams<B: Backend> {
+                    pub documents: Arc<Box<dyn Dataset<Document>>>,
+                    pub embeddings: Arc<WordEmbeddingsDatabase>,
+                    pub parser: DocumentsParser,
 
-                let mut rng = rand::rngs::StdRng::seed_from_u64(fastrand::u64(..));
+                    pub model_path: PathBuf,
+                    pub model_logs_folder_path: PathBuf,
 
-                let train_samples_dataset = TextGeneratorTrainSamplesDataset::<AutodiffBackend>::new(
-                    documents.clone(),
-                    embeddings.clone(),
-                    parser,
-                    device.clone()
-                );
+                    pub devices: Vec<B::Device>,
+                    pub epochs: usize,
+                    pub learn_rate: f64
+                }
 
-                let validate_samples_dataset = TextGeneratorTrainSamplesDataset::<Backend>::new(
-                    documents.clone(),
-                    embeddings.clone(),
-                    parser,
-                    device.clone()
-                );
+                fn train<B: Backend>(params: TrainParams<B>) -> anyhow::Result<()> {
+                    let device = params.devices.first()
+                        .cloned()
+                        .ok_or_else(|| anyhow::anyhow!("No devices supplied"))?;
 
-                let train_samples_dataset = ShuffledDataset::new(train_samples_dataset, &mut rng);
-                let validate_samples_dataset = ShuffledDataset::new(validate_samples_dataset, &mut rng);
+                    println!("⏳ Preparing training datasets...");
 
-                let validate_dataset_len = (train_samples_dataset.len() as f32 * 0.15) as usize;
+                    let mut rng = rand::rngs::StdRng::seed_from_u64(fastrand::u64(..));
 
-                let validate_samples_dataset = PartialDataset::new(validate_samples_dataset, 0, validate_dataset_len);
-
-                let train_samples_dataset = DataLoaderBuilder::new(TextGeneratorTrainSamplesBatcher)
-                    .num_workers(4)
-                    .batch_size(32)
-                    .build(train_samples_dataset);
-
-                let validate_samples_dataset = DataLoaderBuilder::new(TextGeneratorTrainSamplesBatcher)
-                    .num_workers(4)
-                    .batch_size(32)
-                    .build(validate_samples_dataset);
-
-                println!("⏳ Opening the model...");
-
-                let text_generation_model = TextGenerationModel::<AutodiffBackend>::load(&model, &device)
-                    .unwrap_or_else(|_| TextGenerationModel::<AutodiffBackend>::random(&device));
-
-                println!("⏳ Training the model...");
-
-                let learner = LearnerBuilder::new(model_logs_folder)
-                    // .metric_train_numeric(AccuracyMetric::new())
-                    // .metric_valid_numeric(AccuracyMetric::new())
-                    .metric_train_numeric(LossMetric::new())
-                    .metric_valid_numeric(LossMetric::new())
-                    .metric_train_numeric(CpuUse::new())
-                    .metric_valid_numeric(CpuUse::new())
-                    .metric_train_numeric(CpuMemory::new())
-                    .metric_valid_numeric(CpuMemory::new())
-                    .devices(vec![device.clone()])
-                    .grads_accumulation(4)
-                    .num_epochs(epochs)
-                    .summary()
-                    .build(
-                        text_generation_model,
-                        AdamWConfig::new().init(),
-                        CosineAnnealingLrSchedulerConfig::new(learn_rate, 10).init().unwrap()
+                    let train_samples_dataset = TextGeneratorTrainSamplesDataset::<Autodiff<B>>::new(
+                        params.documents.clone(),
+                        params.embeddings.clone(),
+                        params.parser,
+                        device.clone()
                     );
 
-                let text_generation_model = learner.fit(train_samples_dataset, validate_samples_dataset);
+                    let validate_samples_dataset = TextGeneratorTrainSamplesDataset::<B>::new(
+                        params.documents.clone(),
+                        params.embeddings.clone(),
+                        params.parser,
+                        device.clone()
+                    );
 
-                println!("{}", "✅ Model trained".green());
-                println!("⏳ Saving the model...");
+                    let train_samples_dataset = ShuffledDataset::new(train_samples_dataset, &mut rng);
+                    let validate_samples_dataset = ShuffledDataset::new(validate_samples_dataset, &mut rng);
 
-                text_generation_model.save(model)?;
+                    let validate_dataset_len = (train_samples_dataset.len() as f32 * 0.15) as usize;
 
-                println!("{}", "✅ Model saved".green());
+                    let validate_samples_dataset = PartialDataset::new(validate_samples_dataset, 0, validate_dataset_len);
+
+                    let train_samples_dataset = DataLoaderBuilder::new(TextGeneratorTrainSamplesBatcher)
+                        .num_workers(4)
+                        .batch_size(32)
+                        .build(train_samples_dataset);
+
+                    let validate_samples_dataset = DataLoaderBuilder::new(TextGeneratorTrainSamplesBatcher)
+                        .num_workers(4)
+                        .batch_size(32)
+                        .build(validate_samples_dataset);
+
+                    println!("⏳ Opening the model...");
+
+                    let text_generation_model = TextGenerationModel::<Autodiff<B>>::load(&params.model_path, &device)
+                        .unwrap_or_else(|_| TextGenerationModel::<Autodiff<B>>::random(&device));
+
+                    println!("⏳ Training the model...");
+
+                    let learner = LearnerBuilder::new(params.model_logs_folder_path)
+                        // .metric_train_numeric(AccuracyMetric::new())
+                        // .metric_valid_numeric(AccuracyMetric::new())
+                        .metric_train_numeric(LossMetric::new())
+                        .metric_valid_numeric(LossMetric::new())
+                        .metric_train_numeric(CpuUse::new())
+                        .metric_valid_numeric(CpuUse::new())
+                        .metric_train_numeric(CpuMemory::new())
+                        .metric_valid_numeric(CpuMemory::new())
+                        .devices(params.devices)
+                        .grads_accumulation(4)
+                        .num_epochs(params.epochs)
+                        .summary()
+                        .build(
+                            text_generation_model,
+                            AdamWConfig::new().init(),
+                            ConstantLr::new(params.learn_rate)
+                        );
+
+                    let text_generation_model = learner.fit(train_samples_dataset, validate_samples_dataset);
+
+                    println!("{}", "✅ Model trained".green());
+                    println!("⏳ Saving the model...");
+
+                    text_generation_model.save(params.model_path)?;
+
+                    println!("{}", "✅ Model saved".green());
+
+                    Ok(())
+                }
+
+                let result = if remote_device.is_empty() {
+                    train::<Wgpu>(TrainParams {
+                        documents,
+                        embeddings,
+                        parser,
+
+                        model_path: model,
+                        model_logs_folder_path: model_logs_folder,
+
+                        devices: vec![WgpuDevice::default()],
+                        epochs,
+                        learn_rate
+                    })
+                }
+
+                else {
+                    train::<RemoteBackend>(TrainParams {
+                        documents,
+                        embeddings,
+                        parser,
+
+                        model_path: model,
+                        model_logs_folder_path: model_logs_folder,
+
+                        devices: remote_device.iter()
+                            .map(|url| RemoteDevice::new(url))
+                            .collect(),
+
+                        epochs,
+                        learn_rate
+                    })
+                };
+
+                if let Err(err) = result {
+                    eprintln!("{}", format!("🧯 Failed to train the model: {err}").red());
+                }
             }
 
             Self::Generate { embeddings, cache_size, lowercase, strip_punctuation, whitespace_tokens, context, max_tokens } => {
@@ -243,13 +297,13 @@ impl TextGeneratorCLI {
                 println!("⏳ Opening the model...");
 
                 let parser = DocumentsParser::new(lowercase, strip_punctuation, whitespace_tokens);
-                let device = Device::default();
+                let device = WgpuDevice::default();
 
                 // Backend::seed(fastrand::u64(..));
                 // AutodiffBackend::seed(fastrand::u64(..));
 
-                let text_generation_model = TextGenerationModel::<Backend>::load(&model, &device)
-                    .unwrap_or_else(|_| TextGenerationModel::<Backend>::random(&device));
+                let text_generation_model = TextGenerationModel::<Wgpu>::load(&model, &device)
+                    .unwrap_or_else(|_| TextGenerationModel::<Wgpu>::random(&device));
 
                 let stdin = std::io::stdin();
                 let mut stdout = std::io::stdout();
@@ -284,7 +338,7 @@ impl TextGeneratorCLI {
                                 Err(err) => Err(err)
                             }
                         })
-                        .collect::<anyhow::Result<Option<Vec<Tensor<Backend, 1, Float>>>>>();
+                        .collect::<anyhow::Result<Option<Vec<Tensor<Wgpu, 1, Float>>>>>();
 
                     let Some(input_embeddings) = input_embeddings? else {
                         stdout.write_all("📖 Some input word is not indexed\n\n".as_bytes())?;
