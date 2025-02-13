@@ -14,7 +14,7 @@ pub const EMBEDDING_MAX_TOKENS: usize = 65536;
 pub const EMBEDDING_CONTEXT_RADIUS: usize = 3;
 
 /// Amount of dimensions in the word embedding vector.
-pub const EMBEDDING_SIZE: usize = 32;
+pub const EMBEDDING_SIZE: usize = 128;
 
 pub mod prelude {
     pub use super::database::Database as WordEmbeddingsDatabase;

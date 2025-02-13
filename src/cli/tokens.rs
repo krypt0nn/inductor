@@ -78,10 +78,11 @@ impl TokensCLI {
 
                 let parser = DocumentsParser::new(lowercase, strip_punctuation, whitespace_tokens);
 
-                documents.for_each(|document| {
-                    // Make new one for each document so this struct potentially won't fill whole RAM.
-                    let mut inserted_tokens = HashSet::new();
+                println!("⏳ Updating tokens database...");
 
+                let mut inserted_tokens = HashSet::new();
+
+                documents.for_each(|document| {
                     for token in parser.read_document(document) {
                         if inserted_tokens.insert(token.clone()) {
                             tokens.insert_token(token)?;
@@ -90,6 +91,8 @@ impl TokensCLI {
 
                     Ok(())
                 })?;
+
+                println!("✅ Updated {} tokens", inserted_tokens.len().to_string().yellow());
             }
         }
 
