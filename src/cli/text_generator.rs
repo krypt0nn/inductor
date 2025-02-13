@@ -169,12 +169,12 @@ impl TextGeneratorCLI {
 
                 let train_samples_dataset = DataLoaderBuilder::new(TextGeneratorTrainSamplesBatcher)
                     .num_workers(4)
-                    .batch_size(16)
+                    .batch_size(32)
                     .build(train_samples_dataset);
 
                 let validate_samples_dataset = DataLoaderBuilder::new(TextGeneratorTrainSamplesBatcher)
                     .num_workers(4)
-                    .batch_size(16)
+                    .batch_size(32)
                     .build(validate_samples_dataset);
 
                 println!("⏳ Opening the model...");
