@@ -40,6 +40,10 @@ pub enum EmbeddingsCLI {
         strip_punctuation: bool,
 
         #[arg(long, short)]
+        /// Save whitespace characters as tokens.
+        whitespace_tokens: bool,
+
+        #[arg(long, short)]
         /// Path to the word tokens database.
         tokens: PathBuf,
 
@@ -97,7 +101,7 @@ impl EmbeddingsCLI {
                 }
             }
 
-            Self::Train { documents, lowercase, strip_punctuation, tokens, model, epochs, learn_rate } => {
+            Self::Train { documents, lowercase, strip_punctuation, whitespace_tokens, tokens, model, epochs, learn_rate } => {
                 let embeddings = database.canonicalize().unwrap_or(database);
                 let documents = documents.canonicalize().unwrap_or(documents);
                 let tokens = tokens.canonicalize().unwrap_or(tokens);
@@ -149,7 +153,7 @@ impl EmbeddingsCLI {
 
                 println!("⏳ Preparing training datasets...");
 
-                let parser = DocumentsParser::new(lowercase, strip_punctuation);
+                let parser = DocumentsParser::new(lowercase, strip_punctuation, whitespace_tokens);
                 let device = Device::default();
 
                 // Backend::seed(fastrand::u64(..));

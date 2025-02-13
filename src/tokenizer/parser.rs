@@ -9,7 +9,10 @@ pub struct Parser {
     pub lowercase: bool,
 
     /// Strip all puncturaion characters.
-    pub strip_punctuation: bool
+    pub strip_punctuation: bool,
+
+    /// Save whitespace characters as tokens.
+    pub whitespace_tokens: bool
 }
 
 impl Parser {
@@ -23,10 +26,11 @@ impl Parser {
     pub const OUTPUT_CLOSE_TAG: &'static str = "</output>";
 
     #[inline]
-    pub fn new(lowercase: bool, strip_punctuation: bool) -> Self {
+    pub fn new(lowercase: bool, strip_punctuation: bool, whitespace_tokens: bool) -> Self {
         Self {
             lowercase,
-            strip_punctuation
+            strip_punctuation,
+            whitespace_tokens
         }
     }
 
@@ -43,7 +47,8 @@ impl Parser {
                 .filter(|char| !self.strip_punctuation || !char.is_ascii_punctuation())
                 .collect::<VecDeque<char>>(),
 
-            current: 0
+            current: 0,
+            whitespace_tokens: self.whitespace_tokens
         }
     }
 
@@ -98,14 +103,15 @@ impl Parser {
 
 pub struct TokensReader {
     text: VecDeque<char>,
-    current: usize
+    current: usize,
+    whitespace_tokens: bool
 }
 
 impl Iterator for TokensReader {
     type Item = String;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let len = self.text.len();
+        let mut len = self.text.len();
 
         while self.current < len {
             // Continue collecting alpha-numerics (literal values built from letters and numbers).
@@ -129,7 +135,11 @@ impl Iterator for TokensReader {
                 else {
                     let whitespace = self.text.pop_front()?.to_string();
 
-                    return Some(whitespace);
+                    len -= 1;
+
+                    if self.whitespace_tokens {
+                        return Some(whitespace);
+                    }
                 }
             }
 
@@ -226,11 +236,17 @@ impl FusedIterator for TokensReader {}
 
 #[test]
 fn test_document_tokenizer() {
+    let tokens = Parser::new(true, true, false)
+        .read_text("Example text!")
+        .collect::<Vec<String>>();
+
+    assert_eq!(tokens, &["example", "text"]);
+
     let document = Document::new("Example document")
         .with_input("With <very> =special11- #@%\"<-input->\"!")
         .with_context("</and_potentially> broken <xml @ tags>");
 
-    let tokens = Parser::default()
+    let tokens = Parser::new(false, false, true)
         .read_document(document.clone())
         .collect::<Vec<String>>();
 

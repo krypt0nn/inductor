@@ -47,6 +47,10 @@ pub enum TextGeneratorCLI {
         /// Strip punctuation from the documents.
         strip_punctuation: bool,
 
+        #[arg(long, short)]
+        /// Save whitespace characters as tokens.
+        whitespace_tokens: bool,
+
         #[arg(long, default_value_t = 10)]
         /// Number of epochs to train the word embeddings model.
         epochs: usize,
@@ -76,6 +80,10 @@ pub enum TextGeneratorCLI {
         strip_punctuation: bool,
 
         #[arg(long, short)]
+        /// Save whitespace characters as tokens.
+        whitespace_tokens: bool,
+
+        #[arg(long, short)]
         /// Context for which the model should generate the output.
         context: Option<String>,
 
@@ -89,7 +97,7 @@ impl TextGeneratorCLI {
     #[inline]
     pub fn execute(self, model: PathBuf) -> anyhow::Result<()> {
         match self {
-            Self::Train { documents, embeddings, cache_size, lowercase, strip_punctuation, epochs, learn_rate } => {
+            Self::Train { documents, embeddings, cache_size, lowercase, strip_punctuation, whitespace_tokens, epochs, learn_rate } => {
                 let documents = documents.canonicalize().unwrap_or(documents);
                 let embeddings = embeddings.canonicalize().unwrap_or(embeddings);
 
@@ -130,7 +138,7 @@ impl TextGeneratorCLI {
 
                 println!("⏳ Preparing training datasets...");
 
-                let parser = DocumentsParser::new(lowercase, strip_punctuation);
+                let parser = DocumentsParser::new(lowercase, strip_punctuation, whitespace_tokens);
                 let device = Device::default();
 
                 // Backend::seed(fastrand::u64(..));
@@ -205,7 +213,7 @@ impl TextGeneratorCLI {
                 println!("{}", "✅ Model saved".green());
             }
 
-            Self::Generate { embeddings, cache_size, lowercase, strip_punctuation, context, max_tokens } => {
+            Self::Generate { embeddings, cache_size, lowercase, strip_punctuation, whitespace_tokens, context, max_tokens } => {
                 let embeddings = embeddings.canonicalize().unwrap_or(embeddings);
 
                 let model = model.canonicalize().unwrap_or(model);
@@ -234,7 +242,7 @@ impl TextGeneratorCLI {
 
                 println!("⏳ Opening the model...");
 
-                let parser = DocumentsParser::new(lowercase, strip_punctuation);
+                let parser = DocumentsParser::new(lowercase, strip_punctuation, whitespace_tokens);
                 let device = Device::default();
 
                 // Backend::seed(fastrand::u64(..));
@@ -299,6 +307,11 @@ impl TextGeneratorCLI {
                         }
 
                         stdout.write_all(output_token.as_bytes())?;
+
+                        if !whitespace_tokens {
+                            stdout.write_all(b" ")?;
+                        }
+
                         stdout.flush()?;
 
                         if i >= max_tokens {

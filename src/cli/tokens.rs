@@ -23,7 +23,11 @@ pub enum TokensCLI {
 
         #[arg(long, short)]
         /// Strip punctuation from the documents.
-        strip_punctuation: bool
+        strip_punctuation: bool,
+
+        #[arg(long, short)]
+        /// Save whitespace characters as tokens.
+        whitespace_tokens: bool
     }
 }
 
@@ -46,7 +50,7 @@ impl TokensCLI {
                 }
             }
 
-            Self::Update { documents, lowercase, strip_punctuation } => {
+            Self::Update { documents, lowercase, strip_punctuation, whitespace_tokens } => {
                 let tokens = database.canonicalize().unwrap_or(database);
                 let documents = documents.canonicalize().unwrap_or(documents);
 
@@ -72,7 +76,7 @@ impl TokensCLI {
                     }
                 };
 
-                let parser = DocumentsParser::new(lowercase, strip_punctuation);
+                let parser = DocumentsParser::new(lowercase, strip_punctuation, whitespace_tokens);
 
                 documents.for_each(|document| {
                     // Make new one for each document so this struct potentially won't fill whole RAM.

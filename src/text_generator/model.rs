@@ -106,7 +106,7 @@ impl<B: Backend> Iterator for TextGenerationIter<'_, B> {
         let n = self.history.len();
 
         let context_window = if n < TEXT_GENERATOR_CONTEXT_TOKENS_NUM {
-            let padding = Tensor::zeros([1, (TEXT_GENERATOR_CONTEXT_TOKENS_NUM - n) * EMBEDDING_SIZE], self.device);
+            let padding = Tensor::zeros([TEXT_GENERATOR_CONTEXT_TOKENS_NUM - n, EMBEDDING_SIZE], self.device);
 
             Tensor::cat(vec![padding, Tensor::cat(self.history[0..n].to_vec(), 0)], 0)
         }
