@@ -36,23 +36,23 @@ pub enum EmbeddingsCLI {
         /// Path to the word embeddings model.
         model: PathBuf,
 
-        #[arg(long, short, default_value_t = 65536)]
+        #[arg(long, default_value_t = 65536)]
         /// Maximal amount of tokens which can be encoded by the model.
         one_hot_tokens: usize,
 
-        #[arg(long, short, default_value_t = 128)]
+        #[arg(long, default_value_t = 128)]
         /// Amount of dimensions in a word embedding.
         embedding_size: usize,
 
-        #[arg(long, short)]
+        #[arg(long)]
         /// Convert content of the documents to lowercase.
         lowercase: bool,
 
-        #[arg(long, short)]
+        #[arg(long)]
         /// Strip punctuation from the documents.
         strip_punctuation: bool,
 
-        #[arg(long, short)]
+        #[arg(long)]
         /// Save whitespace characters as tokens.
         whitespace_tokens: bool,
 
@@ -79,11 +79,11 @@ pub enum EmbeddingsCLI {
         /// Path to the word embeddings model.
         model: PathBuf,
 
-        #[arg(long, short, default_value_t = 65536)]
+        #[arg(long, default_value_t = 65536)]
         /// Maximal amount of tokens which can be encoded by the model
         one_hot_tokens: usize,
 
-        #[arg(long, short, default_value_t = 128)]
+        #[arg(long, default_value_t = 128)]
         /// Amount of dimensions in a word embedding.
         embedding_size: usize
     },
@@ -237,7 +237,7 @@ impl EmbeddingsCLI {
                     let validate_samples_dataset = ComposedDataset::new(validate_samples_dataset);
                     let validate_samples_dataset = ShuffledDataset::new(validate_samples_dataset, &mut rng);
 
-                    let validate_dataset_len = (train_samples_dataset.len() as f32 * 0.15) as usize;
+                    let validate_dataset_len = std::cmp::min((train_samples_dataset.len() as f32 * 0.15) as usize, 10000);
 
                     let validate_samples_dataset = PartialDataset::new(validate_samples_dataset, 0, validate_dataset_len);
 

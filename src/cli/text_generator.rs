@@ -21,11 +21,11 @@ use crate::prelude::*;
 pub enum TextGeneratorCLI {
     /// Train text generation model on provided documents dataset.
     Train {
-        #[arg(long, short)]
+        #[arg(long)]
         /// Path to the instructed documents database.
         documents: PathBuf,
 
-        #[arg(long, short)]
+        #[arg(long)]
         /// Path to the word embeddings database.
         embeddings: PathBuf,
 
@@ -35,15 +35,15 @@ pub enum TextGeneratorCLI {
         /// Positive value sets cache size in bytes, negative - in sqlite pages.
         cache_size: i64,
 
-        #[arg(long, short)]
+        #[arg(long)]
         /// Convert content of the documents to lowercase.
         lowercase: bool,
 
-        #[arg(long, short)]
+        #[arg(long)]
         /// Strip punctuation from the documents.
         strip_punctuation: bool,
 
-        #[arg(long, short)]
+        #[arg(long)]
         /// Save whitespace characters as tokens.
         whitespace_tokens: bool,
 
@@ -55,13 +55,13 @@ pub enum TextGeneratorCLI {
         /// Number of epochs to train the word embeddings model.
         epochs: usize,
 
-        #[arg(long, default_value_t = 0.015)]
+        #[arg(long, default_value_t = 0.035)]
         /// Learn rate of the model training.
         learn_rate: f64
     },
 
     Generate {
-        #[arg(long, short)]
+        #[arg(long)]
         /// Path to the word embeddings database.
         embeddings: PathBuf,
 
@@ -71,23 +71,23 @@ pub enum TextGeneratorCLI {
         /// Positive value sets cache size in bytes, negative - in sqlite pages.
         cache_size: i64,
 
-        #[arg(long, short)]
+        #[arg(long)]
         /// Convert content of the documents to lowercase.
         lowercase: bool,
 
-        #[arg(long, short)]
+        #[arg(long)]
         /// Strip punctuation from the documents.
         strip_punctuation: bool,
 
-        #[arg(long, short)]
+        #[arg(long)]
         /// Save whitespace characters as tokens.
         whitespace_tokens: bool,
 
-        #[arg(long, short)]
+        #[arg(long)]
         /// Context for which the model should generate the output.
         context: Option<String>,
 
-        #[arg(long, short, default_value_t = 500)]
+        #[arg(long, default_value_t = 512)]
         /// Maximal amount of tokens to generate.
         max_tokens: usize
     }
@@ -95,7 +95,7 @@ pub enum TextGeneratorCLI {
 
 impl TextGeneratorCLI {
     #[inline]
-    pub fn execute(self, model: PathBuf) -> anyhow::Result<()> {
+    pub fn execute(self, model: PathBuf, embedding_size: usize, context_tokens_num: usize) -> anyhow::Result<()> {
         match self {
             Self::Train { documents, embeddings, cache_size, lowercase, strip_punctuation, whitespace_tokens, remote_device, epochs, learn_rate } => {
                 let documents = documents.canonicalize().unwrap_or(documents);
@@ -143,6 +143,8 @@ impl TextGeneratorCLI {
                     pub embeddings: Arc<WordEmbeddingsDatabase>,
                     pub parser: DocumentsParser,
 
+                    pub model_embedding_size: usize,
+                    pub model_context_tokens_num: usize,
                     pub model_path: PathBuf,
                     pub model_logs_folder_path: PathBuf,
 
@@ -177,7 +179,7 @@ impl TextGeneratorCLI {
                     let train_samples_dataset = ShuffledDataset::new(train_samples_dataset, &mut rng);
                     let validate_samples_dataset = ShuffledDataset::new(validate_samples_dataset, &mut rng);
 
-                    let validate_dataset_len = (train_samples_dataset.len() as f32 * 0.15) as usize;
+                    let validate_dataset_len = std::cmp::min((train_samples_dataset.len() as f32 * 0.15) as usize, 10000);
 
                     let validate_samples_dataset = PartialDataset::new(validate_samples_dataset, 0, validate_dataset_len);
 
@@ -193,8 +195,8 @@ impl TextGeneratorCLI {
 
                     println!("⏳ Opening the model...");
 
-                    let text_generation_model = TextGenerationModel::<Autodiff<B>>::load(&params.model_path, &device)
-                        .unwrap_or_else(|_| TextGenerationModel::<Autodiff<B>>::random(&device));
+                    let text_generation_model = TextGenerationModel::<Autodiff<B>>::load(params.model_embedding_size, params.model_context_tokens_num, &params.model_path, &device)
+                        .unwrap_or_else(|_| TextGenerationModel::<Autodiff<B>>::random(params.model_embedding_size, params.model_context_tokens_num, &device));
 
                     println!("⏳ Training the model...");
 
@@ -235,6 +237,8 @@ impl TextGeneratorCLI {
                         embeddings,
                         parser,
 
+                        model_embedding_size: embedding_size,
+                        model_context_tokens_num: context_tokens_num,
                         model_path: model,
                         model_logs_folder_path: model_logs_folder,
 
@@ -250,6 +254,8 @@ impl TextGeneratorCLI {
                         embeddings,
                         parser,
 
+                        model_embedding_size: embedding_size,
+                        model_context_tokens_num: context_tokens_num,
                         model_path: model,
                         model_logs_folder_path: model_logs_folder,
 
@@ -302,8 +308,8 @@ impl TextGeneratorCLI {
                 // Backend::seed(fastrand::u64(..));
                 // AutodiffBackend::seed(fastrand::u64(..));
 
-                let text_generation_model = TextGenerationModel::<Wgpu>::load(&model, &device)
-                    .unwrap_or_else(|_| TextGenerationModel::<Wgpu>::random(&device));
+                let text_generation_model = TextGenerationModel::<Wgpu>::load(embedding_size, context_tokens_num, &model, &device)
+                    .unwrap_or_else(|_| TextGenerationModel::<Wgpu>::random(embedding_size, context_tokens_num, &device));
 
                 let stdin = std::io::stdin();
                 let mut stdout = std::io::stdout();

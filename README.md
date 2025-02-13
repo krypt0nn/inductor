@@ -127,14 +127,16 @@ window, and a feed-forward dense layer.
 
 ### Train the model on given documents and word embeddings
 
-| Optional flags        | Meaning                                                       |
-| --------------------- | ------------------------------------------------------------- |
-| `--lowercase`         | Convert document text to lowercase                            |
-| `--strip-punctuation` | Remove all punctuation characters. Can easily break your text |
-| `--whitespace-tokens` | Make whitespace characters separate tokens                    |
-| `--remote-device`     | URL to a remote device. Can be set multiple times             |
-| `--epochs`            | Amount of epochs to train the model                           |
-| `--learn-rate`        | Rate of the model's training. Should be around 0.003          |
+| Optional flags         | Meaning                                                       |
+| ---------------------- | ------------------------------------------------------------- |
+| `--embedding-size`     | Amount of dimensions in a word embedding                      |
+| `--context-tokens-num` | Amount of tokens used to predict the next one                 |
+| `--lowercase`          | Convert document text to lowercase                            |
+| `--strip-punctuation`  | Remove all punctuation characters. Can easily break your text |
+| `--whitespace-tokens`  | Make whitespace characters separate tokens                    |
+| `--remote-device`      | URL to a remote device. Can be set multiple times             |
+| `--epochs`             | Amount of epochs to train the model                           |
+| `--learn-rate`         | Rate of the model's training. Should be around 0.003          |
 
 ```bash
 inductor text-generator --model text-generator-model train --documents documents.db --embeddings embeddings.db
@@ -144,6 +146,8 @@ inductor text-generator --model text-generator-model train --documents documents
 
 | Optional flags        | Meaning                                                       |
 | --------------------- | ------------------------------------------------------------- |
+| `--embedding-size`     | Amount of dimensions in a word embedding                      |
+| `--context-tokens-num` | Amount of tokens used to predict the next one                 |
 | `--lowercase`         | Convert document text to lowercase                            |
 | `--strip-punctuation` | Remove all punctuation characters. Can easily break your text |
 | `--whitespace-tokens` | Make whitespace characters separate tokens                    |

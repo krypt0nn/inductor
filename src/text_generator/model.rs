@@ -11,26 +11,31 @@ use burn::record::{BinGzFileRecorder, FullPrecisionSettings};
 
 use crate::prelude::*;
 
-const INPUT_WINDOW_SIZE: usize = EMBEDDING_SIZE * TEXT_GENERATOR_CONTEXT_TOKENS_NUM;
-
 #[derive(Debug, Module)]
 pub struct TextGenerationModel<B: Backend> {
     encoder: Lstm<B>,
-    decoder: Linear<B>
+    decoder: Linear<B>,
+    embedding_size: usize,
+    context_tokens_num: usize
 }
 
 impl<B: Backend> TextGenerationModel<B> {
     /// Build new model with random weights.
-    pub fn random(device: &B::Device) -> Self {
+    pub fn random(embedding_size: usize, context_tokens_num: usize, device: &B::Device) -> Self {
+        let input_window_size = embedding_size * context_tokens_num;
+
         Self {
-            encoder: LstmConfig::new(INPUT_WINDOW_SIZE, INPUT_WINDOW_SIZE, true)
+            encoder: LstmConfig::new(input_window_size, input_window_size, true)
                 .with_initializer(Initializer::XavierNormal { gain: 2.0 })
                 .init(device),
 
-            decoder: LinearConfig::new(INPUT_WINDOW_SIZE, EMBEDDING_SIZE)
+            decoder: LinearConfig::new(input_window_size, embedding_size)
                 .with_bias(true)
                 .with_initializer(Initializer::XavierNormal { gain: 2.0 })
-                .init(device)
+                .init(device),
+
+            embedding_size,
+            context_tokens_num
         }
     }
 
@@ -42,10 +47,13 @@ impl<B: Backend> TextGenerationModel<B> {
     }
 
     /// Load model from a file.
-    pub fn load(file: impl AsRef<Path>, device: &B::Device) -> anyhow::Result<Self> {
+    pub fn load(embedding_size: usize, context_tokens_num: usize, file: impl AsRef<Path>, device: &B::Device) -> anyhow::Result<Self> {
         let recorder = BinGzFileRecorder::<FullPrecisionSettings>::new();
 
-        Ok(Self::random(device).load_file(file.as_ref(), &recorder, device)?)
+        let model = Self::random(embedding_size, context_tokens_num, device)
+            .load_file(file.as_ref(), &recorder, device)?;
+
+        Ok(model)
     }
 
     /// Get new tokens generation iterator.
@@ -105,24 +113,26 @@ impl<B: Backend> Iterator for TextGenerationIter<'_, B> {
     fn next(&mut self) -> Option<Self::Item> {
         let n = self.history.len();
 
-        let context_window = if n < TEXT_GENERATOR_CONTEXT_TOKENS_NUM {
-            let padding = Tensor::zeros([TEXT_GENERATOR_CONTEXT_TOKENS_NUM - n, EMBEDDING_SIZE], self.device);
+        let context_window = if n < self.model.context_tokens_num {
+            let padding = Tensor::zeros([self.model.context_tokens_num - n, self.model.embedding_size], self.device);
 
             Tensor::cat(vec![padding, Tensor::cat(self.history[0..n].to_vec(), 0)], 0)
         }
 
         else {
-            Tensor::cat(self.history[n - TEXT_GENERATOR_CONTEXT_TOKENS_NUM..n].to_vec(), 0)
+            Tensor::cat(self.history[n - self.model.context_tokens_num..n].to_vec(), 0)
         };
 
-        let (hidden, state) = self.model.encoder.forward(context_window.reshape([1, 1, INPUT_WINDOW_SIZE]), self.state.take());
+        let input_window_size = self.model.embedding_size * self.model.context_tokens_num;
+
+        let (hidden, state) = self.model.encoder.forward(context_window.reshape([1, 1, input_window_size]), self.state.take());
         let output = self.model.decoder.forward(hidden);
 
-        self.history.push(output.reshape([1, EMBEDDING_SIZE]));
+        self.history.push(output.reshape([1, self.model.embedding_size]));
         self.state = Some(state);
 
         self.history.last()
             .cloned()
-            .map(|tensor| tensor.reshape([EMBEDDING_SIZE]))
+            .map(|tensor| tensor.reshape([self.model.embedding_size]))
     }
 }

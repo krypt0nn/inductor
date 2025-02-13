@@ -66,6 +66,14 @@ pub enum CLI {
         /// Path to the text generation model.
         model: PathBuf,
 
+        #[arg(long, short, default_value_t = 128)]
+        /// Amount of dimensions in a word embedding.
+        embedding_size: usize,
+
+        #[arg(long, short, default_value_t = 8)]
+        /// Amount of tokens used to predict the next one.
+        context_tokens_num: usize,
+
         #[command(subcommand)]
         command: text_generator::TextGeneratorCLI
     },
@@ -84,7 +92,7 @@ impl CLI {
             Self::Documents { database, cache_size, command } => command.execute(database, cache_size),
             Self::Tokens { database, cache_size, command } => command.execute(database, cache_size),
             Self::Embeddings { database, cache_size, command } => command.execute(database, cache_size),
-            Self::TextGenerator { model, command } => command.execute(model),
+            Self::TextGenerator { model, embedding_size, context_tokens_num, command } => command.execute(model, embedding_size, context_tokens_num),
 
             Self::Serve { port } => {
                 let device = WgpuDevice::default();
