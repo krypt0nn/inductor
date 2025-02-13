@@ -29,6 +29,14 @@ pub enum EmbeddingsCLI {
         documents: PathBuf,
 
         #[arg(long, short)]
+        /// Path to the word tokens database.
+        tokens: PathBuf,
+
+        #[arg(long, short)]
+        /// Path to the word embeddings model.
+        model: PathBuf,
+
+        #[arg(long, short)]
         /// Convert content of the documents to lowercase.
         lowercase: bool,
 
@@ -39,14 +47,6 @@ pub enum EmbeddingsCLI {
         #[arg(long, short)]
         /// Save whitespace characters as tokens.
         whitespace_tokens: bool,
-
-        #[arg(long, short)]
-        /// Path to the word tokens database.
-        tokens: PathBuf,
-
-        #[arg(long, short)]
-        /// Path to the word embeddings model.
-        model: PathBuf,
 
         #[arg(long, short)]
         /// Address of remote device used for training.
@@ -102,7 +102,7 @@ impl EmbeddingsCLI {
                 }
             }
 
-            Self::Train { documents, lowercase, strip_punctuation, whitespace_tokens, tokens, model, remote_device, epochs, learn_rate } => {
+            Self::Train { documents, tokens, model, lowercase, strip_punctuation, whitespace_tokens, remote_device, epochs, learn_rate } => {
                 let embeddings = database.canonicalize().unwrap_or(database);
                 let documents = documents.canonicalize().unwrap_or(documents);
                 let tokens = tokens.canonicalize().unwrap_or(tokens);

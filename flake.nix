@@ -23,13 +23,47 @@
 
     outputs = { self, nixpkgs, flake-utils, rust-overlay }:
         flake-utils.lib.eachDefaultSystem (system:
-            let pkgs = import nixpkgs {
-                inherit system;
+            let
+                pkgs = import nixpkgs {
+                    inherit system;
 
-                overlays = [ rust-overlay.overlays.default ];
-            };
+                    overlays = [ rust-overlay.overlays.default ];
+                };
+
+                config = pkgs.lib.importTOML ./Cargo.toml;
 
             in {
+                packages.default = pkgs.rustPlatform.buildRustPackage {
+                    pname = config.package.name;
+                    version = config.package.version;
+
+                    src = ./.;
+                    cargoLock.lockFile = ./Cargo.lock;
+
+                    doCheck = false;
+
+                    meta = with pkgs.lib; {
+                        description = config.package.description;
+                        homepage = config.package.homepage;
+                        license = licenses.gpl3Only;
+
+                        maintainers = [
+                            {
+                                name = "Nikita Podvirnyi";
+                                email = "krypt0nn@vk.com";
+                                matrix = "@krypt0nn:mozilla.org";
+                                github = "krypt0nn";
+                                githubId = 29639507;
+                            }
+                        ];
+                    };
+
+                    nativeBuildInputs = with pkgs; [
+                        rust-bin.stable.latest.minimal
+                        gcc
+                    ];
+                };
+
                 devShells.default = pkgs.mkShell rec {
                     buildInputs = with pkgs; [
                         vulkan-loader
