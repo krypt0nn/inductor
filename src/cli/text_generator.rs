@@ -63,11 +63,11 @@ pub enum TextGeneratorCLI {
         /// Final learn rate of the model training.
         final_learn_rate: f64,
 
-        #[arg(long, default_value_t = 32)]
+        #[arg(long, default_value_t = 64)]
         /// Amount of sequences to train at one iteration. Increases memory use.
         batch_size: usize,
 
-        #[arg(long, default_value_t = 4)]
+        #[arg(long, default_value_t = 2)]
         /// Average last iterations before updating the model's weights.
         accumulate_gradients: usize
     },

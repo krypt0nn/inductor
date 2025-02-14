@@ -91,7 +91,7 @@ impl<B: Backend> TextGenerationModel<B> {
         let loss = MseLoss::new().forward(
             predicted.clone(),
             samples.targets.clone(),
-            Reduction::Sum
+            Reduction::Mean
         );
 
         RegressionOutput::new(loss, predicted, samples.targets)
