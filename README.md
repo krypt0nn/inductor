@@ -82,7 +82,8 @@ inductor embeddings --database embeddings.db create
 | `--whitespace-tokens`        | Make whitespace characters separate tokens                                        |
 | `--remote-device`            | URL to a remote device. Can be set multiple times                                 |
 | `--epochs`                   | Amount of epochs to train the model                                               |
-| `--learn-rate`               | Rate of the model's training. Should be around 0.003                              |
+| `--initial-learn-rate`       | Initial learn rate of the model training. Should be relatively large              |
+| `--final-learn-rate`         | Final learn rate of the model training. Should be relatively small                |
 
 ```bash
 inductor embeddings --database embeddings.db train --documents documents.db --tokens tokens.db --model embeddings-model

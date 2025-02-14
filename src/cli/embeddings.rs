@@ -13,7 +13,7 @@ use burn::data::dataset::transform::{ComposedDataset, ShuffledDataset, PartialDa
 use burn::train::LearnerBuilder;
 use burn::train::metric::{LossMetric, CpuUse, CpuMemory};
 use burn::optim::AdamWConfig;
-use burn::lr_scheduler::constant::ConstantLr;
+use burn::lr_scheduler::linear::LinearLrSchedulerConfig;
 
 use crate::prelude::*;
 
@@ -68,9 +68,13 @@ pub enum EmbeddingsCLI {
         /// Number of epochs to train the word embeddings model.
         epochs: usize,
 
-        #[arg(long, default_value_t = 0.00035)]
-        /// Learn rate of the model training.
-        learn_rate: f64
+        #[arg(long, default_value_t = 0.03)]
+        /// Initial learn rate of the model training.
+        initial_learn_rate: f64,
+
+        #[arg(long, default_value_t = 0.00003)]
+        /// Final learn rate of the model training.
+        final_learn_rate: f64
     },
 
     /// Update embeddings for all tokens from the database using provided model.
@@ -134,7 +138,8 @@ impl EmbeddingsCLI {
                 whitespace_tokens,
                 remote_device,
                 epochs,
-                learn_rate
+                initial_learn_rate,
+                final_learn_rate
             } => {
                 let embeddings = database.canonicalize().unwrap_or(database);
                 let documents = documents.canonicalize().unwrap_or(documents);
@@ -201,7 +206,8 @@ impl EmbeddingsCLI {
 
                     pub devices: Vec<B::Device>,
                     pub epochs: usize,
-                    pub learn_rate: f64
+                    pub initial_learn_rate: f64,
+                    pub final_learn_rate: f64
                 }
 
                 fn train<B: Backend>(params: TrainParams<B>) -> anyhow::Result<()> {
@@ -284,7 +290,11 @@ impl EmbeddingsCLI {
                         .build(
                             embeddings_model,
                             AdamWConfig::new().init(),
-                            ConstantLr::new(params.learn_rate)
+                            LinearLrSchedulerConfig::new(
+                                params.initial_learn_rate,
+                                params.final_learn_rate,
+                                params.epochs
+                            ).init().unwrap()
                         );
 
                     let embeddings_model = learner.fit(train_samples_dataset, validate_samples_dataset);
@@ -326,7 +336,8 @@ impl EmbeddingsCLI {
 
                         devices: vec![WgpuDevice::default()],
                         epochs,
-                        learn_rate
+                        initial_learn_rate,
+                        final_learn_rate
                     })
                 }
 
@@ -348,7 +359,8 @@ impl EmbeddingsCLI {
                             .collect(),
 
                         epochs,
-                        learn_rate
+                        initial_learn_rate,
+                        final_learn_rate
                     })
                 };
 
