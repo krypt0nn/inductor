@@ -4,9 +4,9 @@ use burn::prelude::*;
 
 use burn::nn::{Linear, LinearConfig};
 use burn::nn::Initializer;
-use burn::nn::loss::{MseLoss, Reduction};
+use burn::nn::loss::BinaryCrossEntropyLossConfig;
 use burn::tensor::backend::AutodiffBackend;
-use burn::train::{TrainStep, TrainOutput, ValidStep, RegressionOutput};
+use burn::train::{TrainStep, TrainOutput, ValidStep, MultiLabelClassificationOutput};
 use burn::record::{BinGzFileRecorder, FullPrecisionSettings};
 
 use crate::prelude::*;
@@ -61,31 +61,30 @@ impl<B: Backend> WordEmbeddingModel<B> {
         self.encoder.forward(one_hot_tensor(&[token], self.one_hot_tokens, device))
     }
 
-    fn forward_batch(&self, samples: WordEmbeddingTrainSamplesBatch<B>) -> RegressionOutput<B> {
+    fn forward_batch(&self, samples: WordEmbeddingTrainSamplesBatch<B>) -> MultiLabelClassificationOutput<B> {
         let embeddings = self.encoder.forward(samples.contexts);
         let predicted_targets = self.decoder.forward(embeddings);
 
-        let loss = MseLoss::new().forward(
-            predicted_targets.clone(),
-            samples.targets.clone(),
-            Reduction::Sum
-        );
+        let loss = BinaryCrossEntropyLossConfig::new()
+            .with_logits(true)
+            .init(&predicted_targets.device())
+            .forward(predicted_targets.clone(), samples.targets.clone().int());
 
-        RegressionOutput::new(loss, predicted_targets, samples.targets)
+        MultiLabelClassificationOutput::new(loss, predicted_targets, samples.targets.int())
     }
 }
 
-impl<B: AutodiffBackend> TrainStep<WordEmbeddingTrainSamplesBatch<B>, RegressionOutput<B>> for WordEmbeddingModel<B> {
-    fn step(&self, samples: WordEmbeddingTrainSamplesBatch<B>) -> TrainOutput<RegressionOutput<B>> {
+impl<B: AutodiffBackend> TrainStep<WordEmbeddingTrainSamplesBatch<B>, MultiLabelClassificationOutput<B>> for WordEmbeddingModel<B> {
+    fn step(&self, samples: WordEmbeddingTrainSamplesBatch<B>) -> TrainOutput<MultiLabelClassificationOutput<B>> {
         let output = self.forward_batch(samples);
 
         TrainOutput::new(self, output.loss.backward(), output)
     }
 }
 
-impl<B: Backend> ValidStep<WordEmbeddingTrainSamplesBatch<B>, RegressionOutput<B>> for WordEmbeddingModel<B> {
+impl<B: Backend> ValidStep<WordEmbeddingTrainSamplesBatch<B>, MultiLabelClassificationOutput<B>> for WordEmbeddingModel<B> {
     #[inline]
-    fn step(&self, samples: WordEmbeddingTrainSamplesBatch<B>) -> RegressionOutput<B> {
+    fn step(&self, samples: WordEmbeddingTrainSamplesBatch<B>) -> MultiLabelClassificationOutput<B> {
         self.forward_batch(samples)
     }
 }
