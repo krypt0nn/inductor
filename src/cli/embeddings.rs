@@ -68,7 +68,7 @@ pub enum EmbeddingsCLI {
         /// Number of epochs to train the word embeddings model.
         epochs: usize,
 
-        #[arg(long, default_value_t = 0.035)]
+        #[arg(long, default_value_t = 0.00035)]
         /// Learn rate of the model training.
         learn_rate: f64
     },
