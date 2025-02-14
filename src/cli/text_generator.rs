@@ -395,8 +395,7 @@ impl TextGeneratorCLI {
                     stdout.flush()?;
 
                     let mut document = Document::default()
-                        .with_input(line.trim())
-                        .with_output(line.trim());
+                        .with_input(line.trim());
 
                     if let Some(context) = &context {
                         document = document.with_context(context);
