@@ -74,7 +74,7 @@ pub enum CLI {
         /// Amount of tokens used to predict the next one.
         context_tokens_num: usize,
 
-        #[arg(long, short, default_value_t = 10000)]
+        #[arg(long, short, default_value_t = 5000)]
         /// Amount of tokens after which position encoding will start repeating.
         ///
         /// If set to 0 no positional encoding is applied.

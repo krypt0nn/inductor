@@ -47,6 +47,6 @@ pub fn encode_position<B: Backend>(tensor: Tensor<B, 1, Float>, position: usize,
     //
     // Encoding is calculated as:
     //
-    // encoding[k] = sin(args[k] * args_shifts[k]) = sin(2pi * curr / total * (k + 1))
-    tensor + (args * args_shifts).sin()
+    // encoding[k] = sin(args[k] * args_shifts[k]) = sin(2pi * curr / total / (k + 1))
+    tensor + (args / args_shifts).sin()
 }
