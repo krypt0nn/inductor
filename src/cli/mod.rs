@@ -70,7 +70,7 @@ pub enum CLI {
         /// Amount of dimensions in a word embedding.
         embedding_size: usize,
 
-        #[arg(long, short, default_value_t = 8)]
+        #[arg(long, short, default_value_t = 2)]
         /// Amount of tokens used to predict the next one.
         context_tokens_num: usize,
 

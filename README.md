@@ -84,6 +84,8 @@ inductor embeddings --database embeddings.db create
 | `--epochs`                   | Amount of epochs to train the model                                               |
 | `--initial-learn-rate`       | Initial learn rate of the model training. Should be relatively large              |
 | `--final-learn-rate`         | Final learn rate of the model training. Should be relatively small                |
+| `--batch-size`               | Amount of sequences to train at one iteration. Increases memory use               |
+| `--accumulate-gradients`     | Average last iterations before updating the model's weights                       |
 
 ```bash
 inductor embeddings --database embeddings.db train --documents documents.db --tokens tokens.db --model embeddings-model
@@ -129,16 +131,19 @@ window, and a feed-forward dense layer.
 
 ### Train the model on given documents and word embeddings
 
-| Optional flags         | Meaning                                                       |
-| ---------------------- | ------------------------------------------------------------- |
-| `--embedding-size`     | Amount of dimensions in a word embedding                      |
-| `--context-tokens-num` | Amount of tokens used to predict the next one                 |
-| `--lowercase`          | Convert document text to lowercase                            |
-| `--strip-punctuation`  | Remove all punctuation characters. Can easily break your text |
-| `--whitespace-tokens`  | Make whitespace characters separate tokens                    |
-| `--remote-device`      | URL to a remote device. Can be set multiple times             |
-| `--epochs`             | Amount of epochs to train the model                           |
-| `--learn-rate`         | Rate of the model's training. Should be around 0.003          |
+| Optional flags           | Meaning                                                              |
+| ------------------------ | -------------------------------------------------------------------- |
+| `--embedding-size`       | Amount of dimensions in a word embedding                             |
+| `--context-tokens-num`   | Amount of tokens used to predict the next one                        |
+| `--lowercase`            | Convert document text to lowercase                                   |
+| `--strip-punctuation`    | Remove all punctuation characters. Can easily break your text        |
+| `--whitespace-tokens`    | Make whitespace characters separate tokens                           |
+| `--remote-device`        | URL to a remote device. Can be set multiple times                    |
+| `--epochs`               | Amount of epochs to train the model                                  |
+| `--initial-learn-rate`   | Initial learn rate of the model training. Should be relatively large |
+| `--final-learn-rate`     | Final learn rate of the model training. Should be relatively small   |
+| `--batch-size`           | Amount of sequences to train at one iteration. Increases memory use  |
+| `--accumulate-gradients` | Average last iterations before updating the model's weights          |
 
 ```bash
 inductor text-generator --model text-generator-model train --documents documents.db --embeddings embeddings.db
@@ -146,15 +151,15 @@ inductor text-generator --model text-generator-model train --documents documents
 
 ### Generate text using the trained model
 
-| Optional flags        | Meaning                                                       |
-| --------------------- | ------------------------------------------------------------- |
+| Optional flags         | Meaning                                                       |
+| ---------------------- | ------------------------------------------------------------- |
 | `--embedding-size`     | Amount of dimensions in a word embedding                      |
 | `--context-tokens-num` | Amount of tokens used to predict the next one                 |
-| `--lowercase`         | Convert document text to lowercase                            |
-| `--strip-punctuation` | Remove all punctuation characters. Can easily break your text |
-| `--whitespace-tokens` | Make whitespace characters separate tokens                    |
-| `--context`           | Optional context string applied to the generating document    |
-| `--max-tokens`        | Maximal amount of tokens to generate                          |
+| `--lowercase`          | Convert document text to lowercase                            |
+| `--strip-punctuation`  | Remove all punctuation characters. Can easily break your text |
+| `--whitespace-tokens`  | Make whitespace characters separate tokens                    |
+| `--context`            | Optional context string applied to the generating document    |
+| `--max-tokens`         | Maximal amount of tokens to generate                          |
 
 ```bash
 inductor text-generator --model text-generator-model generate --embeddings embeddings.db

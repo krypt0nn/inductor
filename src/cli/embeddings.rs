@@ -74,7 +74,15 @@ pub enum EmbeddingsCLI {
 
         #[arg(long, default_value_t = 0.00003)]
         /// Final learn rate of the model training.
-        final_learn_rate: f64
+        final_learn_rate: f64,
+
+        #[arg(long, default_value_t = 32)]
+        /// Amount of sequences to train at one iteration. Increases memory use.
+        batch_size: usize,
+
+        #[arg(long, default_value_t = 4)]
+        /// Average last iterations before updating the model's weights.
+        accumulate_gradients: usize
     },
 
     /// Update embeddings for all tokens from the database using provided model.
@@ -139,7 +147,9 @@ impl EmbeddingsCLI {
                 remote_device,
                 epochs,
                 initial_learn_rate,
-                final_learn_rate
+                final_learn_rate,
+                batch_size,
+                accumulate_gradients
             } => {
                 let embeddings = database.canonicalize().unwrap_or(database);
                 let documents = documents.canonicalize().unwrap_or(documents);
@@ -207,7 +217,9 @@ impl EmbeddingsCLI {
                     pub devices: Vec<B::Device>,
                     pub epochs: usize,
                     pub initial_learn_rate: f64,
-                    pub final_learn_rate: f64
+                    pub final_learn_rate: f64,
+                    pub batch_size: usize,
+                    pub accumulate_gradients: usize
                 }
 
                 fn train<B: Backend>(params: TrainParams<B>) -> anyhow::Result<()> {
@@ -259,12 +271,12 @@ impl EmbeddingsCLI {
 
                     let train_samples_dataset = DataLoaderBuilder::new(WordEmbeddingTrainSamplesBatcher)
                         .num_workers(4)
-                        .batch_size(32)
+                        .batch_size(params.batch_size)
                         .build(train_samples_dataset);
 
                     let validate_samples_dataset = DataLoaderBuilder::new(WordEmbeddingTrainSamplesBatcher)
                         .num_workers(4)
-                        .batch_size(32)
+                        .batch_size(params.batch_size)
                         .build(validate_samples_dataset);
 
                     println!("⏳ Opening the model...");
@@ -284,7 +296,7 @@ impl EmbeddingsCLI {
                         .metric_train_numeric(CpuMemory::new())
                         .metric_valid_numeric(CpuMemory::new())
                         .devices(params.devices)
-                        .grads_accumulation(4)
+                        .grads_accumulation(params.accumulate_gradients)
                         .num_epochs(params.epochs)
                         .summary()
                         .build(
@@ -337,7 +349,9 @@ impl EmbeddingsCLI {
                         devices: vec![WgpuDevice::default()],
                         epochs,
                         initial_learn_rate,
-                        final_learn_rate
+                        final_learn_rate,
+                        batch_size,
+                        accumulate_gradients
                     })
                 }
 
@@ -360,7 +374,9 @@ impl EmbeddingsCLI {
 
                         epochs,
                         initial_learn_rate,
-                        final_learn_rate
+                        final_learn_rate,
+                        batch_size,
+                        accumulate_gradients
                     })
                 };
 

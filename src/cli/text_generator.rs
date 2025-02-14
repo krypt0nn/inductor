@@ -13,7 +13,7 @@ use burn::data::dataset::transform::{ShuffledDataset, PartialDataset};
 use burn::train::LearnerBuilder;
 use burn::train::metric::{LossMetric, CpuUse, CpuMemory};
 use burn::optim::AdamWConfig;
-use burn::lr_scheduler::constant::ConstantLr;
+use burn::lr_scheduler::linear::LinearLrSchedulerConfig;
 
 use crate::prelude::*;
 
@@ -55,9 +55,21 @@ pub enum TextGeneratorCLI {
         /// Number of epochs to train the word embeddings model.
         epochs: usize,
 
-        #[arg(long, default_value_t = 0.00035)]
-        /// Learn rate of the model training.
-        learn_rate: f64
+        #[arg(long, default_value_t = 0.03)]
+        /// Initial learn rate of the model training.
+        initial_learn_rate: f64,
+
+        #[arg(long, default_value_t = 0.00003)]
+        /// Final learn rate of the model training.
+        final_learn_rate: f64,
+
+        #[arg(long, default_value_t = 4)]
+        /// Amount of sequences to train at one iteration. Increases memory use.
+        batch_size: usize,
+
+        #[arg(long, default_value_t = 8)]
+        /// Average last iterations before updating the model's weights.
+        accumulate_gradients: usize
     },
 
     Generate {
@@ -97,7 +109,20 @@ impl TextGeneratorCLI {
     #[inline]
     pub fn execute(self, model: PathBuf, embedding_size: usize, context_tokens_num: usize) -> anyhow::Result<()> {
         match self {
-            Self::Train { documents, embeddings, cache_size, lowercase, strip_punctuation, whitespace_tokens, remote_device, epochs, learn_rate } => {
+            Self::Train {
+                documents,
+                embeddings,
+                cache_size,
+                lowercase,
+                strip_punctuation,
+                whitespace_tokens,
+                remote_device,
+                epochs,
+                initial_learn_rate,
+                final_learn_rate,
+                batch_size,
+                accumulate_gradients
+            } => {
                 let documents = documents.canonicalize().unwrap_or(documents);
                 let embeddings = embeddings.canonicalize().unwrap_or(embeddings);
 
@@ -150,7 +175,10 @@ impl TextGeneratorCLI {
 
                     pub devices: Vec<B::Device>,
                     pub epochs: usize,
-                    pub learn_rate: f64
+                    pub initial_learn_rate: f64,
+                    pub final_learn_rate: f64,
+                    pub batch_size: usize,
+                    pub accumulate_gradients: usize
                 }
 
                 fn train<B: Backend>(params: TrainParams<B>) -> anyhow::Result<()> {
@@ -189,12 +217,12 @@ impl TextGeneratorCLI {
 
                     let train_samples_dataset = DataLoaderBuilder::new(TextGeneratorTrainSamplesBatcher)
                         .num_workers(4)
-                        .batch_size(32)
+                        .batch_size(params.batch_size)
                         .build(train_samples_dataset);
 
                     let validate_samples_dataset = DataLoaderBuilder::new(TextGeneratorTrainSamplesBatcher)
                         .num_workers(4)
-                        .batch_size(32)
+                        .batch_size(params.batch_size)
                         .build(validate_samples_dataset);
 
                     println!("⏳ Opening the model...");
@@ -214,13 +242,17 @@ impl TextGeneratorCLI {
                         .metric_train_numeric(CpuMemory::new())
                         .metric_valid_numeric(CpuMemory::new())
                         .devices(params.devices)
-                        .grads_accumulation(4)
+                        .grads_accumulation(params.accumulate_gradients)
                         .num_epochs(params.epochs)
                         .summary()
                         .build(
                             text_generation_model,
                             AdamWConfig::new().init(),
-                            ConstantLr::new(params.learn_rate)
+                            LinearLrSchedulerConfig::new(
+                                params.initial_learn_rate,
+                                params.final_learn_rate,
+                                params.epochs
+                            ).init().unwrap()
                         );
 
                     let text_generation_model = learner.fit(train_samples_dataset, validate_samples_dataset);
@@ -248,7 +280,10 @@ impl TextGeneratorCLI {
 
                         devices: vec![WgpuDevice::default()],
                         epochs,
-                        learn_rate
+                        initial_learn_rate,
+                        final_learn_rate,
+                        batch_size,
+                        accumulate_gradients
                     })
                 }
 
@@ -268,7 +303,10 @@ impl TextGeneratorCLI {
                             .collect(),
 
                         epochs,
-                        learn_rate
+                        initial_learn_rate,
+                        final_learn_rate,
+                        batch_size,
+                        accumulate_gradients
                     })
                 };
 
