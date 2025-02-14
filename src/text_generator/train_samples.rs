@@ -7,61 +7,42 @@ use crate::prelude::*;
 
 #[derive(Debug, Clone)]
 pub struct TextGeneratorTrainSample<B: Backend> {
-    /// Series of input tokens windowed by the context through time.
-    ///
-    /// ```text,ignore
-    /// context[timestep][token_n * embedding_size + embedding_i]
-    /// ```
-    ///
-    /// Example text:
-    ///
-    /// ```text,ignore
-    /// ["this", "is", "an", "example", "text"]
-    /// ```
-    ///
-    /// With context window of 2 tokens this tensor will have:
-    ///
-    /// 1. \["this", "is"\]
-    /// 2. \["ia", "an"\]
-    /// 3. \["an", "example"\]
-    ///
-    /// And the target token is "text".
-    pub context: Tensor<B, 2, Float>,
+    /// Concatenated previous N tokens' embeddings.
+    pub context: Tensor<B, 1, Float>,
 
-    /// Token that should be returned after the series of context windows.
-    ///
-    /// ```text,ignore
-    /// target[embedding_i]
-    /// ```
+    /// Target token's embedding.
     pub target: Tensor<B, 1, Float>
 }
 
 #[derive(Clone)]
 pub struct TextGeneratorTrainSamplesDataset<B: Backend> {
-    documents: Arc<Box<dyn Dataset<Document>>>,
+    tokens: Arc<Vec<String>>,
     embeddings: Arc<WordEmbeddingsDatabase>,
-    parser: DocumentsParser,
     embedding_size: usize,
     context_tokens_num: usize,
+    position_encoding_period: usize,
     device: B::Device
 }
 
 impl<B: Backend> TextGeneratorTrainSamplesDataset<B> {
     #[inline]
-    pub fn new(
-        documents: Arc<Box<dyn Dataset<Document>>>,
+    pub fn from_document(
+        document: Document,
+        parser: &DocumentsParser,
         embeddings: Arc<WordEmbeddingsDatabase>,
-        parser: DocumentsParser,
         embedding_size: usize,
         context_tokens_num: usize,
+        position_encoding_period: usize,
         device: B::Device
     ) -> Self {
+        let tokens = parser.read_document(document).collect();
+
         Self {
-            documents,
+            tokens: Arc::new(tokens),
             embeddings,
-            parser,
             embedding_size,
             context_tokens_num,
+            position_encoding_period,
             device
         }
     }
@@ -69,61 +50,72 @@ impl<B: Backend> TextGeneratorTrainSamplesDataset<B> {
 
 impl<B: Backend> Dataset<TextGeneratorTrainSample<B>> for TextGeneratorTrainSamplesDataset<B> {
     fn get(&self, index: usize) -> Option<TextGeneratorTrainSample<B>> {
-        let document = self.documents.get(index)?;
+        // Get target token.
+        let target_token = self.tokens.get(index)?;
 
-        let mut context_embeddings = self.parser.read_document(document)
-            .map(|token| {
-                match self.embeddings.query_embedding(token) {
-                    Ok(Some(embedding)) => Tensor::from_floats(embedding.as_slice(), &self.device),
-                    _ => Tensor::zeros([self.embedding_size], &self.device)
-                }
-            })
-            .collect::<Vec<Tensor<B, 1, Float>>>();
+        // Get target token's embedding.
+        let Ok(Some(target_token)) = self.embeddings.query_embedding(target_token) else {
+            return None;
+        };
 
-        let target_embedding = context_embeddings.pop()?;
-
-        let n = context_embeddings.len();
-
-        if n <= self.context_tokens_num {
-            let mut zero_padding = vec![
-                Tensor::zeros([(self.context_tokens_num - n) * self.embedding_size], &self.device)
-            ];
-
-            zero_padding.extend(context_embeddings);
-
-            let timestep_sequence = Tensor::cat(zero_padding, 0);
+        // If we can take all context tokens.
+        if index >= self.context_tokens_num {
+            let context_tokens = self.tokens[index - self.context_tokens_num..index].iter()
+                .enumerate()
+                .map(|(i, token)| {
+                    match self.embeddings.query_embedding(token) {
+                        Ok(Some(embedding)) => Some(encode_position(
+                            Tensor::from_floats(embedding.as_slice(), &self.device),
+                            index + i, // unintuitive but trust me
+                            self.position_encoding_period
+                        )),
+                        _ => None
+                    }
+                })
+                .collect::<Option<Vec<Tensor<B, 1, Float>>>>()?;
 
             Some(TextGeneratorTrainSample {
-                context: timestep_sequence.reshape([1, -1]),
-                target: target_embedding
+                context: Tensor::cat(context_tokens, 0),
+                target: Tensor::from_floats(target_token.as_slice(), &self.device)
             })
         }
 
+        // Otherwise we will take what we can and fill everything else with zeros.
         else {
-            let m = n - self.context_tokens_num;
+            let mut padding_tokens = (0..self.context_tokens_num - index)
+                .map(|i| encode_position(Tensor::zeros([self.embedding_size], &self.device), i, self.position_encoding_period))
+                .collect::<Vec<Tensor<B, 1, Float>>>();
 
-            let mut context = Vec::with_capacity(m);
+            let context_tokens = self.tokens[0..index].iter()
+                .enumerate()
+                .map(|(i, token)| {
+                    match self.embeddings.query_embedding(token) {
+                        Ok(Some(embedding)) => Some(encode_position(
+                            Tensor::from_floats(embedding.as_slice(), &self.device),
+                            index + i, // unintuitive but trust me
+                            self.position_encoding_period
+                        )),
+                        _ => None
+                    }
+                })
+                .collect::<Option<Vec<Tensor<B, 1, Float>>>>()?;
 
-            for i in 0..m {
-                let tensor = Tensor::cat(context_embeddings[i..i + self.context_tokens_num].to_vec(), 0);
-
-                context.push(tensor.reshape([1, -1]));
-            }
+            padding_tokens.extend(context_tokens);
 
             Some(TextGeneratorTrainSample {
-                context: Tensor::cat(context, 0),
-                target: target_embedding
+                context: Tensor::cat(padding_tokens, 0),
+                target: Tensor::from_floats(target_token.as_slice(), &self.device)
             })
         }
     }
 
     #[inline]
     fn len(&self) -> usize {
-        self.documents.len()
+        self.tokens.len()
     }
 
     #[inline]
     fn is_empty(&self) -> bool {
-        self.documents.is_empty()
+        self.tokens.is_empty()
     }
 }

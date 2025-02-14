@@ -70,9 +70,15 @@ pub enum CLI {
         /// Amount of dimensions in a word embedding.
         embedding_size: usize,
 
-        #[arg(long, short, default_value_t = 2)]
+        #[arg(long, short, default_value_t = 4)]
         /// Amount of tokens used to predict the next one.
         context_tokens_num: usize,
+
+        #[arg(long, short, default_value_t = 10000)]
+        /// Amount of tokens after which position encoding will start repeating.
+        ///
+        /// If set to 0 no positional encoding is applied.
+        position_encoding_period: usize,
 
         #[command(subcommand)]
         command: text_generator::TextGeneratorCLI
@@ -92,7 +98,21 @@ impl CLI {
             Self::Documents { database, cache_size, command } => command.execute(database, cache_size),
             Self::Tokens { database, cache_size, command } => command.execute(database, cache_size),
             Self::Embeddings { database, cache_size, command } => command.execute(database, cache_size),
-            Self::TextGenerator { model, embedding_size, context_tokens_num, command } => command.execute(model, embedding_size, context_tokens_num),
+
+            Self::TextGenerator {
+                model,
+                embedding_size,
+                context_tokens_num,
+                position_encoding_period,
+                command
+            } => {
+                command.execute(
+                    model,
+                    embedding_size,
+                    context_tokens_num,
+                    position_encoding_period
+                )
+            }
 
             Self::Serve { port } => {
                 let device = WgpuDevice::default();

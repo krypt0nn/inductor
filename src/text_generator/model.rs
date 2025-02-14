@@ -1,7 +1,6 @@
 use std::path::Path;
 
 use burn::prelude::*;
-use burn::nn::lstm::{Lstm, LstmConfig, LstmState};
 use burn::nn::{Linear, LinearConfig};
 use burn::nn::Initializer;
 use burn::nn::loss::{MseLoss, Reduction};
@@ -13,19 +12,26 @@ use crate::prelude::*;
 
 #[derive(Debug, Module)]
 pub struct TextGenerationModel<B: Backend> {
-    encoder: Lstm<B>,
+    encoder: Linear<B>,
     decoder: Linear<B>,
     embedding_size: usize,
-    context_tokens_num: usize
+    context_tokens_num: usize,
+    position_encoding_period: usize
 }
 
 impl<B: Backend> TextGenerationModel<B> {
     /// Build new model with random weights.
-    pub fn random(embedding_size: usize, context_tokens_num: usize, device: &B::Device) -> Self {
+    pub fn random(
+        embedding_size: usize,
+        context_tokens_num: usize,
+        position_encoding_period: usize,
+        device: &B::Device
+    ) -> Self {
         let input_window_size = embedding_size * context_tokens_num;
 
         Self {
-            encoder: LstmConfig::new(input_window_size, input_window_size, true)
+            encoder: LinearConfig::new(input_window_size, input_window_size)
+                .with_bias(true)
                 .with_initializer(Initializer::XavierNormal { gain: 2.0 })
                 .init(device),
 
@@ -35,7 +41,8 @@ impl<B: Backend> TextGenerationModel<B> {
                 .init(device),
 
             embedding_size,
-            context_tokens_num
+            context_tokens_num,
+            position_encoding_period
         }
     }
 
@@ -47,41 +54,47 @@ impl<B: Backend> TextGenerationModel<B> {
     }
 
     /// Load model from a file.
-    pub fn load(embedding_size: usize, context_tokens_num: usize, file: impl AsRef<Path>, device: &B::Device) -> anyhow::Result<Self> {
+    pub fn load(
+        embedding_size: usize,
+        context_tokens_num: usize,
+        position_encoding_period: usize,
+        file: impl AsRef<Path>,
+        device: &B::Device
+    ) -> anyhow::Result<Self> {
         let recorder = BinGzFileRecorder::<FullPrecisionSettings>::new();
 
-        let model = Self::random(embedding_size, context_tokens_num, device)
+        let model = Self::random(embedding_size, context_tokens_num, position_encoding_period, device)
             .load_file(file.as_ref(), &recorder, device)?;
 
         Ok(model)
     }
 
     /// Get new tokens generation iterator.
-    pub fn generate<'model>(&'model self, input: impl IntoIterator<Item = Tensor<B, 1, Float>>, device: &'model B::Device) -> TextGenerationIter<'model, B> {
+    pub fn generate<'model>(&'model self, input: impl IntoIterator<Item = Tensor<B, 1, Float>>, device: &B::Device) -> TextGenerationIter<'model, B> {
         TextGenerationIter {
             model: self,
-            device,
-
-            history: input.into_iter()
-                .map(|tensor| tensor.reshape([1, self.embedding_size]))
-                .collect(),
-
-            state: None
+            history: (0..self.context_tokens_num)
+                .map(|i| encode_position(Tensor::zeros([self.embedding_size], device), i, self.position_encoding_period))
+                .chain({
+                    input.into_iter()
+                        .enumerate()
+                        .map(|(i, tensor)| encode_position(tensor, self.context_tokens_num + i, self.position_encoding_period))
+                })
+                .collect()
         }
     }
 
     fn forward_batch(&self, samples: TextGeneratorTrainSamplesBatch<B>) -> RegressionOutput<B> {
-        let (_, hidden) = self.encoder.forward(samples.contexts, None);
-
-        let predicted_embedding = self.decoder.forward(hidden.hidden);
+        let hidden = self.encoder.forward(samples.contexts);
+        let predicted = self.decoder.forward(hidden);
 
         let loss = MseLoss::new().forward(
-            predicted_embedding.clone(),
+            predicted.clone(),
             samples.targets.clone(),
             Reduction::Sum
         );
 
-        RegressionOutput::new(loss, predicted_embedding, samples.targets)
+        RegressionOutput::new(loss, predicted, samples.targets)
     }
 }
 
@@ -102,9 +115,7 @@ impl<B: Backend> ValidStep<TextGeneratorTrainSamplesBatch<B>, RegressionOutput<B
 
 pub struct TextGenerationIter<'model, B: Backend> {
     model: &'model TextGenerationModel<B>,
-    device: &'model B::Device,
-    history: Vec<Tensor<B, 2, Float>>,
-    state: Option<LstmState<B, 2>>
+    history: Vec<Tensor<B, 1, Float>>
 }
 
 impl<B: Backend> Iterator for TextGenerationIter<'_, B> {
@@ -113,26 +124,13 @@ impl<B: Backend> Iterator for TextGenerationIter<'_, B> {
     fn next(&mut self) -> Option<Self::Item> {
         let n = self.history.len();
 
-        let context_window = if n < self.model.context_tokens_num {
-            let padding = Tensor::zeros([self.model.context_tokens_num - n, self.model.embedding_size], self.device);
+        let context = Tensor::cat(self.history[n - self.model.context_tokens_num..].to_vec(), 0);
 
-            Tensor::cat(vec![padding, Tensor::cat(self.history[0..n].to_vec(), 0)], 0)
-        }
+        let hidden = self.model.encoder.forward(context);
+        let predicted = self.model.decoder.forward(hidden);
 
-        else {
-            Tensor::cat(self.history[n - self.model.context_tokens_num..n].to_vec(), 0)
-        };
+        self.history.push(encode_position(predicted.clone(), n, self.model.position_encoding_period));
 
-        let input_window_size = self.model.embedding_size * self.model.context_tokens_num;
-
-        let (hidden, state) = self.model.encoder.forward(context_window.reshape([1, 1, input_window_size]), self.state.take());
-        let output = self.model.decoder.forward(hidden);
-
-        self.history.push(output.reshape([1, self.model.embedding_size]));
-        self.state = Some(state);
-
-        self.history.last()
-            .cloned()
-            .map(|tensor| tensor.reshape([self.model.embedding_size]))
+        Some(predicted)
     }
 }

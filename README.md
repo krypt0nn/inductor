@@ -126,24 +126,28 @@ inductor embeddings --database embeddings.db export --csv embeddings.csv
 
 ## 4. Train text generation model
 
-Currently text generation model uses 2 layers neural network: recurrent LSTM layer with last 8 tokens
-window, and a feed-forward dense layer.
+Text generation model uses `context_tokens_num` tokens to predict the following one.
+It also uses positional encoding which adds sines with different properties to the tokens' embeddings.
+Theoretically positional encoding should allow model to differ the same word (embedding) placed
+on different positions within the text. You can disable positional encoding by setting
+`position_encoding_period` to 0.
 
 ### Train the model on given documents and word embeddings
 
-| Optional flags           | Meaning                                                              |
-| ------------------------ | -------------------------------------------------------------------- |
-| `--embedding-size`       | Amount of dimensions in a word embedding                             |
-| `--context-tokens-num`   | Amount of tokens used to predict the next one                        |
-| `--lowercase`            | Convert document text to lowercase                                   |
-| `--strip-punctuation`    | Remove all punctuation characters. Can easily break your text        |
-| `--whitespace-tokens`    | Make whitespace characters separate tokens                           |
-| `--remote-device`        | URL to a remote device. Can be set multiple times                    |
-| `--epochs`               | Amount of epochs to train the model                                  |
-| `--initial-learn-rate`   | Initial learn rate of the model training. Should be relatively large |
-| `--final-learn-rate`     | Final learn rate of the model training. Should be relatively small   |
-| `--batch-size`           | Amount of sequences to train at one iteration. Increases memory use  |
-| `--accumulate-gradients` | Average last iterations before updating the model's weights          |
+| Optional flags               | Meaning                                                              |
+| ---------------------------- | -------------------------------------------------------------------- |
+| `--embedding-size`           | Amount of dimensions in a word embedding                             |
+| `--context-tokens-num`       | Amount of tokens used to predict the next one                        |
+| `--position-encoding-period` | Amount of tokens after which position encoding will start repeating  |
+| `--lowercase`                | Convert document text to lowercase                                   |
+| `--strip-punctuation`        | Remove all punctuation characters. Can easily break your text        |
+| `--whitespace-tokens`        | Make whitespace characters separate tokens                           |
+| `--remote-device`            | URL to a remote device. Can be set multiple times                    |
+| `--epochs`                   | Amount of epochs to train the model                                  |
+| `--initial-learn-rate`       | Initial learn rate of the model training. Should be relatively large |
+| `--final-learn-rate`         | Final learn rate of the model training. Should be relatively small   |
+| `--batch-size`               | Amount of sequences to train at one iteration. Increases memory use  |
+| `--accumulate-gradients`     | Average last iterations before updating the model's weights          |
 
 ```bash
 inductor text-generator --model text-generator-model train --documents documents.db --embeddings embeddings.db
@@ -151,15 +155,16 @@ inductor text-generator --model text-generator-model train --documents documents
 
 ### Generate text using the trained model
 
-| Optional flags         | Meaning                                                       |
-| ---------------------- | ------------------------------------------------------------- |
-| `--embedding-size`     | Amount of dimensions in a word embedding                      |
-| `--context-tokens-num` | Amount of tokens used to predict the next one                 |
-| `--lowercase`          | Convert document text to lowercase                            |
-| `--strip-punctuation`  | Remove all punctuation characters. Can easily break your text |
-| `--whitespace-tokens`  | Make whitespace characters separate tokens                    |
-| `--context`            | Optional context string applied to the generating document    |
-| `--max-tokens`         | Maximal amount of tokens to generate                          |
+| Optional flags               | Meaning                                                             |
+| ---------------------------- | ------------------------------------------------------------------- |
+| `--embedding-size`           | Amount of dimensions in a word embedding                            |
+| `--context-tokens-num`       | Amount of tokens used to predict the next one                       |
+| `--position-encoding-period` | Amount of tokens after which position encoding will start repeating |
+| `--lowercase`                | Convert document text to lowercase                                  |
+| `--strip-punctuation`        | Remove all punctuation characters. Can easily break your text       |
+| `--whitespace-tokens`        | Make whitespace characters separate tokens                          |
+| `--context`                  | Optional context string applied to the generating document          |
+| `--max-tokens`               | Maximal amount of tokens to generate                                |
 
 ```bash
 inductor text-generator --model text-generator-model generate --embeddings embeddings.db
@@ -179,6 +184,8 @@ Used in combination with `--remote-device` flags.
 ```bash
 inductor serve
 ```
+
+> Note: burn doesn't support remote devices yet. This is a placeholder for potential future support.
 
 Author: [Nikita Podvirnyi](https://github.com/krypt0nn)\
 Licensed under [GPL-3.0](LICENSE)

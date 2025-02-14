@@ -16,19 +16,18 @@ pub struct WordEmbeddingTrainSamplesBatch<B: Backend> {
 pub struct WordEmbeddingTrainSamplesBatcher;
 
 impl<B: Backend> Batcher<WordEmbeddingTrainSample<B>, WordEmbeddingTrainSamplesBatch<B>> for WordEmbeddingTrainSamplesBatcher {
-    fn batch(&self, items: Vec<WordEmbeddingTrainSample<B>>) -> WordEmbeddingTrainSamplesBatch<B> {
-        let (contexts, targets) = items.into_iter()
-            .map(|sample| {
-                let context = sample.context.reshape([1, -1]);
-                let target = sample.target.reshape([1, -1]);
+    fn batch(&self, mut items: Vec<WordEmbeddingTrainSample<B>>) -> WordEmbeddingTrainSamplesBatch<B> {
+        let mut contexts = Vec::with_capacity(items.len());
+        let mut targets = Vec::with_capacity(items.len());
 
-                (context, target)
-            })
-            .collect::<(Vec<_>, Vec<_>)>();
+        for item in items.drain(..) {
+            contexts.push(item.context);
+            targets.push(item.target);
+        }
 
         WordEmbeddingTrainSamplesBatch {
-            contexts: Tensor::<B, 2, Float>::cat(contexts, 0),
-            targets: Tensor::<B, 2, Float>::cat(targets, 0)
+            contexts: Tensor::stack(contexts, 0),
+            targets: Tensor::stack(targets, 0)
         }
     }
 }
