@@ -266,7 +266,6 @@ impl TextGeneratorCLI {
                         .devices(params.devices)
                         .grads_accumulation(params.accumulate_gradients)
                         .num_epochs(params.epochs)
-                        .summary()
                         .build(
                             text_generation_model,
                             AdamWConfig::new().init(),

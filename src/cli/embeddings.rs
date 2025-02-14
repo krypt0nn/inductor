@@ -298,7 +298,6 @@ impl EmbeddingsCLI {
                         .devices(params.devices)
                         .grads_accumulation(params.accumulate_gradients)
                         .num_epochs(params.epochs)
-                        .summary()
                         .build(
                             embeddings_model,
                             AdamWConfig::new().init(),
