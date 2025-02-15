@@ -234,7 +234,7 @@ impl EmbeddingsCLI {
                     pub accumulate_gradients: usize
                 }
 
-                fn train<B: Backend>(params: TrainParams<B>) -> anyhow::Result<()> {
+                fn train<B: Backend>(mut params: TrainParams<B>) -> anyhow::Result<()> {
                     let device = params.devices.first()
                         .cloned()
                         .ok_or_else(|| anyhow::anyhow!("No devices supplied"))?;
@@ -255,7 +255,7 @@ impl EmbeddingsCLI {
                         let train_dataset = WordEmbeddingsTrainSamplesDataset::<Autodiff<B>>::from_document(
                             document.clone(),
                             &params.parser,
-                            &params.tokens,
+                            &mut params.tokens,
                             device.clone(),
                             sampling_params
                         )?;
@@ -263,7 +263,7 @@ impl EmbeddingsCLI {
                         let validate_dataset = WordEmbeddingsTrainSamplesDataset::<B>::from_document(
                             document,
                             &params.parser,
-                            &params.tokens,
+                            &mut params.tokens,
                             device.clone(),
                             sampling_params
                         )?;
@@ -330,7 +330,7 @@ impl EmbeddingsCLI {
                     println!("{}", "✅ Model trained".green());
                     println!("⏳ Updating token embeddings...");
 
-                    let tokens = params.tokens.for_each(false, |token| {
+                    let tokens = params.tokens.for_each(|token| {
                         let embedding = embeddings_model.encode(token.id as usize, &device)
                             .to_data();
 
@@ -441,7 +441,7 @@ impl EmbeddingsCLI {
 
                 println!("⏳ Updating token embeddings...");
 
-                let tokens = tokens.for_each(false, |token| {
+                let tokens = tokens.for_each(|token| {
                     let embedding = embeddings_model.encode(token.id as usize, &device)
                         .to_data();
 

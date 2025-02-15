@@ -56,7 +56,7 @@ impl TokensCLI {
 
                 println!("⏳ Opening tokens database in {tokens:?}...");
 
-                let tokens = match TokensDatabase::open(&tokens, cache_size) {
+                let mut tokens = match TokensDatabase::open(&tokens, cache_size) {
                     Ok(tokens) => tokens,
                     Err(err) => {
                         eprintln!("{}", format!("🧯 Failed to open tokens database: {err}").red());
@@ -82,12 +82,21 @@ impl TokensCLI {
 
                 let mut inserted_tokens = HashSet::new();
 
+                let transaction = match tokens.insert_tokens() {
+                    Ok(transaction) => transaction,
+                    Err(err) => {
+                        eprintln!("{}", format!("🧯 Failed to open tokens insertion transaction: {err}").red());
+
+                        return Ok(());
+                    }
+                };
+
                 documents.for_each(|document| {
                     for token in parser.read_document(document) {
                         // We insert tokens even if they were already inserted
                         // because tokens database calculates occurences of tokens
                         // within all text corpuses.
-                        tokens.insert_token(&token)?;
+                        transaction.insert_token(&token)?;
 
                         inserted_tokens.insert(token);
                     }
@@ -95,7 +104,10 @@ impl TokensCLI {
                     Ok(())
                 })?;
 
-                println!("✅ Updated {} tokens", inserted_tokens.len().to_string().yellow());
+                match transaction.commit() {
+                    Ok(()) => println!("✅ Updated {} tokens", inserted_tokens.len().to_string().yellow()),
+                    Err(err) => eprintln!("{}", format!("🧯 Failed to commit tokens insertion transaction: {err}").red())
+                }
             }
         }
 

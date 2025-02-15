@@ -64,23 +64,6 @@ impl Database {
         })
     }
 
-    /// Insert token embedding to the database.
-    pub fn insert_embedding(&self, token: impl AsRef<str>, embedding: &[f32]) -> anyhow::Result<()> {
-        let mut embedding_bytes = vec![0; embedding.len() * 4];
-
-        for (i, float) in embedding.iter().enumerate() {
-            embedding_bytes[i * 4..(i + 1) * 4].copy_from_slice(&float.to_be_bytes());
-        }
-
-        let connection = self.connection.lock()
-            .map_err(|_| anyhow::anyhow!("Failed to lock sqlite connection"))?;
-
-        connection.prepare_cached("INSERT OR REPLACE INTO embeddings (token, embedding) VALUES (?1, ?2)")?
-            .execute((token.as_ref(), embedding_bytes))?;
-
-        Ok(())
-    }
-
     /// Query token embedding from the database.
     ///
     /// Guaranteed to return `Ok(None)` if token is not stored.
@@ -100,6 +83,23 @@ impl Database {
         Ok(Some(embedding))
     }
 
+    /// Insert token embedding to the database.
+    pub fn insert_embedding(&self, token: impl AsRef<str>, embedding: &[f32]) -> anyhow::Result<()> {
+        let mut embedding_bytes = vec![0; embedding.len() * 4];
+
+        for (i, float) in embedding.iter().enumerate() {
+            embedding_bytes[i * 4..(i + 1) * 4].copy_from_slice(&float.to_be_bytes());
+        }
+
+        let connection = self.connection.lock()
+            .map_err(|_| anyhow::anyhow!("Failed to lock sqlite connection"))?;
+
+        connection.prepare_cached("INSERT OR REPLACE INTO embeddings (token, embedding) VALUES (?1, ?2)")?
+            .execute((token.as_ref(), embedding_bytes))?;
+
+        Ok(())
+    }
+
     /// Find token in the database with the closest to given embedding.
     ///
     /// Guaranteed to return some value unless the database is empty.
@@ -108,7 +108,7 @@ impl Database {
             .map_err(|_| anyhow::anyhow!("Failed to lock sqlite connection"))?;
 
         let mut rows = connection.prepare_cached("SELECT token, embedding FROM embeddings")?
-            .query_map((), |row: &rusqlite::Row| {
+            .query_map((), |row| {
                 let token = row.get::<_, String>(0)?;
                 let embedding = row.get::<_, Vec<u8>>(1)?;
 
@@ -126,7 +126,7 @@ impl Database {
                     Err(err) => anyhow::bail!(err)
                 }
             })
-            .collect::<Result<Vec<_>, _>>()?;
+            .collect::<anyhow::Result<Vec<_>>>()?;
 
         let Some(mut closest_token) = rows.pop() else {
             return Ok(None);

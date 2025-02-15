@@ -61,21 +61,24 @@ impl<B: Backend> WordEmbeddingsTrainSamplesDataset<B> {
     pub fn from_document(
         document: Document,
         parser: &DocumentsParser,
-        tokens_db: &TokensDatabase,
+        tokens_db: &mut TokensDatabase,
         device: B::Device,
         params: WordEmbeddingSamplingParams
     ) -> anyhow::Result<Self> {
         let mut tokens = parser.read_document(document)
             .map(|word| {
-                match tokens_db.query_token_by_value(&word, true) {
+                match tokens_db.query_token_by_value(&word) {
                     Ok(Some(token)) => Ok(Some(token)),
 
                     // Insert token if it didn't exist in tokens database.
                     _ => {
-                        let token = tokens_db.insert_token(word)?;
+                        let transaction = tokens_db.insert_tokens()?;
+
+                        transaction.insert_token(&word)?;
+                        transaction.commit()?;
 
                         // Query token again to include its frequency.
-                        tokens_db.query_token_by_id(token.id, true)
+                        tokens_db.query_token_by_value(word)
                     }
                 }
             })
@@ -98,10 +101,7 @@ impl<B: Backend> WordEmbeddingsTrainSamplesDataset<B> {
                 }
 
                 // Calculate probability of skipping this token.
-                let skip_probability = match target_token.frequency {
-                    Some(f) => 1.0 - (params.subsample_value / f).sqrt().clamp(0.0, 1.0),
-                    None => 0.0
-                };
+                let skip_probability = 1.0 - (params.subsample_value / target_token.frequency).sqrt().clamp(0.0, 1.0);
 
                 // Randomly skip it.
                 if fastrand::f64() < skip_probability {
