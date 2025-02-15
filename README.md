@@ -87,7 +87,7 @@ Where `clamp` ensures that `sqrt` value is within `[0.0, 1.0]` range.
 
 | Optional flags                   | Meaning                                                                           |
 | -------------------------------- | --------------------------------------------------------------------------------- |
-| `--one-hot-tokens`               | Maximal amount of tokens which can be encoded by the model                        |
+| `--embedding-one-hot-tokens`     | Maximal amount of tokens which can be encoded by the model                        |
 | `--embedding-size`               | Amount of dimensions in a word embedding                                          |
 | `--embedding-context-radius`     | Amount or tokens to the left and right of the current one used to train the model |
 | `--embedding-minimal-occurences` | Skip tokens which occured less times than the specified amount                    |

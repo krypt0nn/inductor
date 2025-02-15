@@ -38,7 +38,7 @@ pub enum EmbeddingsCLI {
 
         #[arg(long, default_value_t = EMBEDDING_DEFAULT_ONE_HOT_TOKENS_NUM)]
         /// Maximal amount of tokens which can be encoded by the model.
-        one_hot_tokens: usize,
+        embedding_one_hot_tokens: usize,
 
         #[arg(long, default_value_t = EMBEDDING_DEFAULT_SIZE)]
         /// Amount of dimensions in a word embedding.
@@ -146,7 +146,7 @@ impl EmbeddingsCLI {
                 documents,
                 tokens,
                 model,
-                one_hot_tokens,
+                embedding_one_hot_tokens,
                 embedding_size,
                 embedding_context_radius,
                 embedding_minimal_occurences,
@@ -218,7 +218,7 @@ impl EmbeddingsCLI {
                     pub embeddings: WordEmbeddingsDatabase,
                     pub parser: DocumentsParser,
 
-                    pub model_one_hot_tokens: usize,
+                    pub model_embedding_one_hot_tokens: usize,
                     pub model_embedding_size: usize,
                     pub model_embedding_context_radius: usize,
                     pub model_embedding_minimal_occurences: u64,
@@ -245,7 +245,7 @@ impl EmbeddingsCLI {
                     let mut validate_samples_dataset = Vec::new();
 
                     let sampling_params = WordEmbeddingSamplingParams {
-                        one_hot_tokens: params.model_one_hot_tokens,
+                        one_hot_tokens: params.model_embedding_one_hot_tokens,
                         context_radius: params.model_embedding_context_radius,
                         min_occurences: params.model_embedding_minimal_occurences,
                         subsample_value: params.model_embedding_subsampling_value
@@ -298,8 +298,8 @@ impl EmbeddingsCLI {
 
                     println!("⏳ Opening the model...");
 
-                    let embeddings_model = WordEmbeddingModel::<Autodiff<B>>::load(params.model_one_hot_tokens, params.model_embedding_size, &params.model_path, &device)
-                        .unwrap_or_else(|_| WordEmbeddingModel::<Autodiff<B>>::random(params.model_one_hot_tokens, params.model_embedding_size, &device));
+                    let embeddings_model = WordEmbeddingModel::<Autodiff<B>>::load(params.model_embedding_one_hot_tokens, params.model_embedding_size, &params.model_path, &device)
+                        .unwrap_or_else(|_| WordEmbeddingModel::<Autodiff<B>>::random(params.model_embedding_one_hot_tokens, params.model_embedding_size, &device));
 
                     println!("⏳ Training the model...");
 
@@ -356,7 +356,7 @@ impl EmbeddingsCLI {
                         embeddings,
                         parser,
 
-                        model_one_hot_tokens: one_hot_tokens,
+                        model_embedding_one_hot_tokens: embedding_one_hot_tokens,
                         model_embedding_size: embedding_size,
                         model_embedding_context_radius: embedding_context_radius,
                         model_embedding_minimal_occurences: embedding_minimal_occurences,
@@ -380,7 +380,7 @@ impl EmbeddingsCLI {
                         embeddings,
                         parser,
 
-                        model_one_hot_tokens: one_hot_tokens,
+                        model_embedding_one_hot_tokens: embedding_one_hot_tokens,
                         model_embedding_size: embedding_size,
                         model_embedding_context_radius: embedding_context_radius,
                         model_embedding_minimal_occurences: embedding_minimal_occurences,
