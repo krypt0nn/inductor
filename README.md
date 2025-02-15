@@ -72,20 +72,35 @@ inductor embeddings --database embeddings.db create
 
 ### Train the model on given documents
 
-| Optional flags               | Meaning                                                                           |
-| ---------------------------- | --------------------------------------------------------------------------------- |
-| `--one-hot-tokens`           | Maximal amount of tokens which can be encoded by the model                        |
-| `--embedding-size`           | Amount of dimensions in a word embedding                                          |
-| `--embedding-context-radius` | Amount or tokens to the left and right of the current one used to train the model |
-| `--lowercase`                | Convert document text to lowercase                                                |
-| `--strip-punctuation`        | Remove all punctuation characters. Can easily break your text                     |
-| `--whitespace-tokens`        | Make whitespace characters separate tokens                                        |
-| `--remote-device`            | URL to a remote device. Can be set multiple times                                 |
-| `--epochs`                   | Amount of epochs to train the model                                               |
-| `--initial-learn-rate`       | Initial learn rate of the model training. Should be relatively large              |
-| `--final-learn-rate`         | Final learn rate of the model training. Should be relatively small                |
-| `--batch-size`               | Amount of sequences to train at one iteration. Increases memory use               |
-| `--accumulate-gradients`     | Average last iterations before updating the model's weights                       |
+During training model will try to learn relative positions of tokens in natural text documents. To do this
+it will read `embedding_context_radius * 2` tokens around the target token and learn to predict it using
+surrounding tokens. To improve model's performance we skip tokens with too few occurences in the documents
+(with less than `minimal_occurences`) and randomly skip tokens based on their frequency and `subsampling_value`.
+
+Token skipping probability is calculated as:
+
+```
+P_skip(token) = 1 - clamp(sqrt(subsample_value / token_frequency))
+```
+
+Where `clamp` ensures that `sqrt` value is within `[0.0, 1.0]` range.
+
+| Optional flags                   | Meaning                                                                           |
+| -------------------------------- | --------------------------------------------------------------------------------- |
+| `--one-hot-tokens`               | Maximal amount of tokens which can be encoded by the model                        |
+| `--embedding-size`               | Amount of dimensions in a word embedding                                          |
+| `--embedding-context-radius`     | Amount or tokens to the left and right of the current one used to train the model |
+| `--embedding-minimal-occurences` | Skip tokens which occured less times than the specified amount                    |
+| `--embedding-subsampling-value`  | Used to calculate probability of skipping word from training samples              |
+| `--lowercase`                    | Convert document text to lowercase                                                |
+| `--strip-punctuation`            | Remove all punctuation characters. Can easily break your text                     |
+| `--whitespace-tokens`            | Make whitespace characters separate tokens                                        |
+| `--remote-device`                | URL to a remote device. Can be set multiple times                                 |
+| `--epochs`                       | Amount of epochs to train the model                                               |
+| `--initial-learn-rate`           | Initial learn rate of the model training. Should be relatively large              |
+| `--final-learn-rate`             | Final learn rate of the model training. Should be relatively small                |
+| `--batch-size`                   | Amount of sequences to train at one iteration. Increases memory use               |
+| `--accumulate-gradients`         | Average last iterations before updating the model's weights                       |
 
 ```bash
 inductor embeddings --database embeddings.db train --documents documents.db --tokens tokens.db --model embeddings-model

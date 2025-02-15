@@ -36,17 +36,25 @@ pub enum EmbeddingsCLI {
         /// Path to the word embeddings model.
         model: PathBuf,
 
-        #[arg(long, default_value_t = 65536)]
+        #[arg(long, default_value_t = EMBEDDING_DEFAULT_ONE_HOT_TOKENS_NUM)]
         /// Maximal amount of tokens which can be encoded by the model.
         one_hot_tokens: usize,
 
-        #[arg(long, default_value_t = 128)]
+        #[arg(long, default_value_t = EMBEDDING_DEFAULT_SIZE)]
         /// Amount of dimensions in a word embedding.
         embedding_size: usize,
 
-        #[arg(long, default_value_t = 3)]
+        #[arg(long, default_value_t = EMBEDDING_DEFAULT_CONTEXT_RADIUS)]
         /// Amount or tokens to the left and right of the current one used to train the model.
         embedding_context_radius: usize,
+
+        #[arg(long, default_value_t = EMBEDDING_DEFAULT_MINIMAL_OCCURENCES)]
+        /// Skip tokens which occured less times than the specified amount.
+        embedding_minimal_occurences: u64,
+
+        #[arg(long, default_value_t = EMBEDDING_DEFAULT_SUBSAMPLE_VALUE)]
+        /// Used to calculate probability of skipping word from training samples.
+        embedding_subsampling_value: f64,
 
         #[arg(long)]
         /// Convert content of the documents to lowercase.
@@ -141,6 +149,8 @@ impl EmbeddingsCLI {
                 one_hot_tokens,
                 embedding_size,
                 embedding_context_radius,
+                embedding_minimal_occurences,
+                embedding_subsampling_value,
                 lowercase,
                 strip_punctuation,
                 whitespace_tokens,
@@ -211,6 +221,8 @@ impl EmbeddingsCLI {
                     pub model_one_hot_tokens: usize,
                     pub model_embedding_size: usize,
                     pub model_embedding_context_radius: usize,
+                    pub model_embedding_minimal_occurences: u64,
+                    pub model_embedding_subsampling_value: f64,
                     pub model_path: PathBuf,
                     pub model_logs_folder_path: PathBuf,
 
@@ -232,23 +244,28 @@ impl EmbeddingsCLI {
                     let mut train_samples_dataset = Vec::new();
                     let mut validate_samples_dataset = Vec::new();
 
+                    let sampling_params = WordEmbeddingSamplingParams {
+                        one_hot_tokens: params.model_one_hot_tokens,
+                        context_radius: params.model_embedding_context_radius,
+                        min_occurences: params.model_embedding_minimal_occurences,
+                        subsample_value: params.model_embedding_subsampling_value
+                    };
+
                     params.documents.for_each(|document| {
                         let train_dataset = WordEmbeddingsTrainSamplesDataset::<Autodiff<B>>::from_document(
                             document.clone(),
                             &params.parser,
                             &params.tokens,
-                            params.model_one_hot_tokens,
-                            params.model_embedding_context_radius,
-                            device.clone()
+                            device.clone(),
+                            sampling_params
                         )?;
 
                         let validate_dataset = WordEmbeddingsTrainSamplesDataset::<B>::from_document(
                             document,
                             &params.parser,
                             &params.tokens,
-                            params.model_one_hot_tokens,
-                            params.model_embedding_context_radius,
-                            device.clone()
+                            device.clone(),
+                            sampling_params
                         )?;
 
                         train_samples_dataset.push(train_dataset);
@@ -342,6 +359,8 @@ impl EmbeddingsCLI {
                         model_one_hot_tokens: one_hot_tokens,
                         model_embedding_size: embedding_size,
                         model_embedding_context_radius: embedding_context_radius,
+                        model_embedding_minimal_occurences: embedding_minimal_occurences,
+                        model_embedding_subsampling_value: embedding_subsampling_value,
                         model_path: model,
                         model_logs_folder_path: model_logs_folder,
 
@@ -364,6 +383,8 @@ impl EmbeddingsCLI {
                         model_one_hot_tokens: one_hot_tokens,
                         model_embedding_size: embedding_size,
                         model_embedding_context_radius: embedding_context_radius,
+                        model_embedding_minimal_occurences: embedding_minimal_occurences,
+                        model_embedding_subsampling_value: embedding_subsampling_value,
                         model_path: model,
                         model_logs_folder_path: model_logs_folder,
 

@@ -5,6 +5,41 @@ use burn::data::dataset::Dataset;
 
 use crate::prelude::*;
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct WordEmbeddingSamplingParams {
+    /// Maximal amount of tokens which can be learned by the model.
+    ///
+    /// Directly affects RAM usage.
+    pub one_hot_tokens: usize,
+
+    /// Amount of tokens around the target one to learn embeddings from.
+    pub context_radius: usize,
+
+    /// Skip tokens which occured less times than the specified amount.
+    pub min_occurences: u64,
+
+    /// Used to calculate probability of skipping word from training samples.
+    ///
+    /// Probability of keeping word in train samples is calculated as:
+    ///
+    /// ```text,ignore
+    /// P_keep(token) = sqrt(subsample_value / token_frequency)
+    /// ```
+    pub subsample_value: f64
+}
+
+impl Default for WordEmbeddingSamplingParams {
+    #[inline]
+    fn default() -> Self {
+        Self {
+            one_hot_tokens: EMBEDDING_DEFAULT_ONE_HOT_TOKENS_NUM,
+            context_radius: EMBEDDING_DEFAULT_CONTEXT_RADIUS,
+            min_occurences: EMBEDDING_DEFAULT_MINIMAL_OCCURENCES,
+            subsample_value: EMBEDDING_DEFAULT_SUBSAMPLE_VALUE
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 /// Single word embedding train sample.
 pub struct WordEmbeddingTrainSample<B: Backend> {
@@ -15,10 +50,10 @@ pub struct WordEmbeddingTrainSample<B: Backend> {
 #[derive(Debug, Clone)]
 /// Read word embedding train samples from the parsed document.
 pub struct WordEmbeddingsTrainSamplesDataset<B: Backend> {
-    tokens: Arc<Vec<usize>>,
-    one_hot_tokens: usize,
-    context_radius: usize,
-    device: B::Device
+    document_tokens: Arc<Vec<usize>>,
+    sampled_tokens: Arc<Vec<usize>>,
+    device: B::Device,
+    params: WordEmbeddingSamplingParams
 }
 
 impl<B: Backend> WordEmbeddingsTrainSamplesDataset<B> {
@@ -27,66 +62,96 @@ impl<B: Backend> WordEmbeddingsTrainSamplesDataset<B> {
         document: Document,
         parser: &DocumentsParser,
         tokens_db: &TokensDatabase,
-        one_hot_tokens: usize,
-        context_radius: usize,
-        device: B::Device
+        device: B::Device,
+        params: WordEmbeddingSamplingParams
     ) -> anyhow::Result<Self> {
-        let tokens = parser.read_document(document)
-            .map(|word| tokens_db.insert_token(word).map(|token| token.id as usize))
-            .collect::<anyhow::Result<Vec<usize>>>()?;
+        let mut tokens = parser.read_document(document)
+            .map(|word| {
+                match tokens_db.query_token_by_value(&word, true) {
+                    Ok(Some(token)) => Ok(Some(token)),
+
+                    // Insert token if it didn't exist in tokens database.
+                    _ => {
+                        let token = tokens_db.insert_token(word)?;
+
+                        // Query token again to include its frequency.
+                        tokens_db.query_token_by_id(token.id, true)
+                    }
+                }
+            })
+            .collect::<anyhow::Result<Option<Vec<TokensDatabaseRecord>>>>()?
+            .ok_or_else(|| anyhow::anyhow!("Failed to query token for one of words within the document"))?;
+
+        let n = tokens.len();
+
+        let document_tokens = tokens.iter()
+            .map(|token| token.id as usize)
+            .collect::<Vec<usize>>();
+
+        if n > params.context_radius * 2 {
+            let mut sampled_tokens = Vec::with_capacity(n - params.context_radius * 2);
+
+            for (i, target_token) in tokens.drain(params.context_radius..n - params.context_radius).enumerate() {
+                // Skip token if it occured too few times in input documents.
+                if (target_token.occurences as u64) < params.min_occurences {
+                    continue;
+                }
+
+                // Calculate probability of skipping this token.
+                let skip_probability = match target_token.frequency {
+                    Some(f) => 1.0 - (params.subsample_value / f).sqrt().clamp(0.0, 1.0),
+                    None => 0.0
+                };
+
+                // Randomly skip it.
+                if fastrand::f64() < skip_probability {
+                    continue;
+                }
+
+                sampled_tokens.push(params.context_radius + i);
+            }
+
+            return Ok(Self {
+                document_tokens: Arc::new(document_tokens),
+                sampled_tokens: Arc::new(sampled_tokens),
+                device,
+                params
+            });
+        }
 
         Ok(Self {
-            tokens: Arc::new(tokens),
-            one_hot_tokens,
-            context_radius,
-            device
+            document_tokens: Arc::new(vec![]),
+            sampled_tokens: Arc::new(vec![]),
+            device,
+            params
         })
-    }
-
-    #[inline]
-    pub fn with_context_radius(mut self, context_radius: usize) -> Self {
-        self.context_radius = context_radius;
-
-        self
-    }
-
-    #[inline]
-    pub fn with_one_hot_tokens(mut self, one_hot_tokens: usize) -> Self {
-        self.one_hot_tokens = one_hot_tokens;
-
-        self
     }
 }
 
 impl<B: Backend> Dataset<WordEmbeddingTrainSample<B>> for WordEmbeddingsTrainSamplesDataset<B> {
     fn get(&self, index: usize) -> Option<WordEmbeddingTrainSample<B>> {
-        let i = self.context_radius + index;
+        let i = self.sampled_tokens.get(index).copied()?;
 
-        self.tokens.get(i)?;
+        let target_token = self.document_tokens[i];
 
-        let mut context = vec![0; self.context_radius * 2];
-        let target = self.tokens[i];
+        let mut context_tokens = vec![0; self.params.context_radius * 2];
 
-        context[..self.context_radius].copy_from_slice(&self.tokens[i - self.context_radius..i]);
-        context[self.context_radius..].copy_from_slice(&self.tokens[i + 1..i + self.context_radius + 1]);
+        context_tokens[..self.params.context_radius].copy_from_slice(&self.document_tokens[i - self.params.context_radius..i]);
+        context_tokens[self.params.context_radius..].copy_from_slice(&self.document_tokens[i + 1..i + self.params.context_radius + 1]);
 
         Some(WordEmbeddingTrainSample {
-            context: one_hot_tensor(&context, self.one_hot_tokens, &self.device),
-            target: one_hot_tensor(&[target], self.one_hot_tokens, &self.device)
+            context: one_hot_tensor(&context_tokens, self.params.one_hot_tokens, &self.device),
+            target: one_hot_tensor(&[target_token], self.params.one_hot_tokens, &self.device)
         })
     }
 
+    #[inline]
     fn len(&self) -> usize {
-        let n = self.tokens.len();
-        let d = self.context_radius * 2;
-
-        n.checked_sub(d).unwrap_or_default()
+        self.sampled_tokens.len()
     }
 
+    #[inline]
     fn is_empty(&self) -> bool {
-        let n = self.tokens.len();
-        let d = self.context_radius * 2;
-
-        n > d
+        self.sampled_tokens.is_empty()
     }
 }
