@@ -29,7 +29,7 @@ pub enum TextGeneratorCLI {
         /// Path to the word embeddings database.
         embeddings: PathBuf,
 
-        #[arg(long, default_value_t = 1024 * 1024 * 32)]
+        #[arg(long, default_value_t = 1024 * 1024 * 128)]
         /// SQLite database cache size.
         ///
         /// Positive value sets cache size in bytes, negative - in sqlite pages.
@@ -77,7 +77,7 @@ pub enum TextGeneratorCLI {
         /// Path to the word embeddings database.
         embeddings: PathBuf,
 
-        #[arg(long, default_value_t = 1024 * 1024 * 8)]
+        #[arg(long, default_value_t = 1024 * 1024 * 64)]
         /// SQLite database cache size.
         ///
         /// Positive value sets cache size in bytes, negative - in sqlite pages.

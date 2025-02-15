@@ -313,13 +313,13 @@ impl EmbeddingsCLI {
                     println!("{}", "✅ Model trained".green());
                     println!("⏳ Updating token embeddings...");
 
-                    let tokens = params.tokens.for_each(|token_id, token| {
-                        let embedding = embeddings_model.encode(token_id as usize, &device)
+                    let tokens = params.tokens.for_each(false, |token| {
+                        let embedding = embeddings_model.encode(token.id as usize, &device)
                             .to_data();
 
                         let embedding = embedding.as_slice().map_err(|err| anyhow::anyhow!("Failed to cast tensor into floats slice: {err:?}"))?;
 
-                        params.embeddings.insert_embedding(token, embedding)
+                        params.embeddings.insert_embedding(token.value, embedding)
                     })?;
 
                     println!("✅ Updated {} embeddings", tokens.to_string().yellow());
@@ -420,13 +420,13 @@ impl EmbeddingsCLI {
 
                 println!("⏳ Updating token embeddings...");
 
-                let tokens = tokens.for_each(|token_id, token| {
-                    let embedding = embeddings_model.encode(token_id as usize, &device)
+                let tokens = tokens.for_each(false, |token| {
+                    let embedding = embeddings_model.encode(token.id as usize, &device)
                         .to_data();
 
                     let embedding = embedding.as_slice().map_err(|err| anyhow::anyhow!("Failed to cast tensor into floats slice: {err:?}"))?;
 
-                    embeddings.insert_embedding(token, embedding)
+                    embeddings.insert_embedding(token.value, embedding)
                 })?;
 
                 println!("✅ Updated {} embeddings", tokens.to_string().yellow());

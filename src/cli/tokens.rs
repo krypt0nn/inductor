@@ -84,9 +84,12 @@ impl TokensCLI {
 
                 documents.for_each(|document| {
                     for token in parser.read_document(document) {
-                        if inserted_tokens.insert(token.clone()) {
-                            tokens.insert_token(token)?;
-                        }
+                        // We insert tokens even if they were already inserted
+                        // because tokens database calculates occurences of tokens
+                        // within all text corpuses.
+                        tokens.insert_token(&token)?;
+
+                        inserted_tokens.insert(token);
                     }
 
                     Ok(())

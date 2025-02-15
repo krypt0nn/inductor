@@ -32,7 +32,7 @@ impl<B: Backend> WordEmbeddingsTrainSamplesDataset<B> {
         device: B::Device
     ) -> anyhow::Result<Self> {
         let tokens = parser.read_document(document)
-            .map(|word| tokens_db.insert_token(word).map(|token| token as usize))
+            .map(|word| tokens_db.insert_token(word).map(|token| token.id as usize))
             .collect::<anyhow::Result<Vec<usize>>>()?;
 
         Ok(Self {

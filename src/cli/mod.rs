@@ -18,7 +18,7 @@ pub enum CLI {
         /// Path to the database file.
         database: PathBuf,
 
-        #[arg(long, default_value_t = 1024 * 1024 * 32)]
+        #[arg(long, default_value_t = 1024 * 1024 * 64)]
         /// SQLite database cache size.
         ///
         /// Positive value sets cache size in bytes, negative - in sqlite pages.
@@ -34,7 +34,7 @@ pub enum CLI {
         /// Path to the database file.
         database: PathBuf,
 
-        #[arg(long, default_value_t = 1024 * 1024)]
+        #[arg(long, default_value_t = 1024 * 1024 * 16)]
         /// SQLite database cache size.
         ///
         /// Positive value sets cache size in bytes, negative - in sqlite pages.
@@ -50,7 +50,7 @@ pub enum CLI {
         /// Path to the database file.
         database: PathBuf,
 
-        #[arg(long, default_value_t = 1024 * 1024 * 32)]
+        #[arg(long, default_value_t = 1024 * 1024 * 64)]
         /// SQLite database cache size.
         ///
         /// Positive value sets cache size in bytes, negative - in sqlite pages.

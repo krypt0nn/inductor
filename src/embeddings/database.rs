@@ -42,29 +42,22 @@ impl Database {
     pub fn open(path: impl AsRef<Path>, cache_size: i64) -> rusqlite::Result<Self> {
         let connection = Connection::open(path)?;
 
-        connection.execute(&format!("PRAGMA cache_size = {cache_size};"), ())?;
+        connection.execute_batch(&format!("
+            PRAGMA cache_size = {cache_size};
 
-        connection.execute_batch("
-            CREATE TABLE IF NOT EXISTS tokens (
-                id    INTEGER NOT NULL,
-                value TEXT UNIQUE NOT NULL,
-
-                PRIMARY KEY (id)
-            );
-
-            CREATE INDEX IF NOT EXISTS idx_tokens_value on tokens (value);
+            PRAGMA journal_mode = MEMORY;
+            PRAGMA temp_store = MEMORY;
+            PRAGMA synchronous = OFF;
 
             CREATE TABLE IF NOT EXISTS embeddings (
-                token_id  INTEGER NOT NULL,
-                embedding BLOB NOT NULL,
+                token      TEXT  NOT NULL,
+                embedding  BLOB  NOT NULL,
 
-                PRIMARY KEY (token_id),
-                FOREIGN KEY (token_id) REFERENCES tokens (id)
+                PRIMARY KEY (token)
             );
 
-            INSERT OR IGNORE INTO tokens (id, value) VALUES (0, '');
-            INSERT OR IGNORE INTO embeddings (token_id, embedding) VALUES (0, '');
-        ")?;
+            INSERT OR IGNORE INTO embeddings (token, embedding) VALUES ('', '');
+        "))?;
 
         Ok(Self {
             connection: Arc::new(Mutex::new(connection))
@@ -82,14 +75,8 @@ impl Database {
         let connection = self.connection.lock()
             .map_err(|_| anyhow::anyhow!("Failed to lock sqlite connection"))?;
 
-        connection.prepare_cached("INSERT OR IGNORE INTO tokens (value) VALUES (?1)")?
-            .execute([token.as_ref()])?;
-
-        let token_id = connection.prepare_cached("SELECT id FROM tokens WHERE value = ?1")?
-            .query_row([token.as_ref()], |row| row.get::<_, i64>(0))?;
-
-        connection.prepare_cached("INSERT OR REPLACE INTO embeddings (token_id, embedding) VALUES (?1, ?2)")?
-            .execute((token_id, embedding_bytes))?;
+        connection.prepare_cached("INSERT OR REPLACE INTO embeddings (token, embedding) VALUES (?1, ?2)")?
+            .execute((token.as_ref(), embedding_bytes))?;
 
         Ok(())
     }
@@ -101,14 +88,8 @@ impl Database {
         let connection = self.connection.lock()
             .map_err(|_| anyhow::anyhow!("Failed to lock sqlite connection"))?;
 
-        let mut query = connection.prepare_cached("
-            SELECT embeddings.embedding FROM embeddings
-            INNER JOIN tokens
-            ON embeddings.token_id = tokens.id
-            WHERE tokens.value = ?1
-        ")?;
-
-        let embedding = query.query_row([token.as_ref()], |row| row.get::<_, Vec<u8>>(0));
+        let embedding = connection.prepare_cached("SELECT embedding FROM embeddings WHERE token = ?1")?
+            .query_row([token.as_ref()], |row| row.get::<_, Vec<u8>>(0));
 
         let embedding = match embedding {
             Ok(embedding_bytes) => parse_embedding(&embedding_bytes)?,
@@ -126,30 +107,26 @@ impl Database {
         let connection = self.connection.lock()
             .map_err(|_| anyhow::anyhow!("Failed to lock sqlite connection"))?;
 
-        let mut query = connection.prepare_cached("
-            SELECT tokens.value, embeddings.embedding
-            FROM tokens
-            INNER JOIN embeddings
-            ON embeddings.token_id = tokens.id
-        ")?;
+        let mut rows = connection.prepare_cached("SELECT token, embedding FROM embeddings")?
+            .query_map((), |row: &rusqlite::Row| {
+                let token = row.get::<_, String>(0)?;
+                let embedding = row.get::<_, Vec<u8>>(1)?;
 
-        let mut rows = query.query_map((), |row: &rusqlite::Row| {
-            let token = row.get::<_, String>(0)?;
-            let embedding = row.get::<_, Vec<u8>>(1)?;
+                Ok((token, embedding))
+            })?
+            .map(move |row| -> anyhow::Result<_> {
+                match row {
+                    Ok((token, current_embedding)) => {
+                        let current_embedding = parse_embedding(&current_embedding)?;
+                        let similarity = cosine_similarity(&current_embedding, embedding);
 
-            Ok((token, embedding))
-        })?.map(move |row| -> anyhow::Result<_> {
-            match row {
-                Ok((token, current_embedding)) => {
-                    let current_embedding = parse_embedding(&current_embedding)?;
-                    let similarity = cosine_similarity(&current_embedding, embedding);
+                        Ok((token, similarity))
+                    }
 
-                    Ok((token, similarity))
+                    Err(err) => anyhow::bail!(err)
                 }
-
-                Err(err) => anyhow::bail!(err)
-            }
-        }).collect::<Result<Vec<_>, _>>()?;
+            })
+            .collect::<Result<Vec<_>, _>>()?;
 
         let Some(mut closest_token) = rows.pop() else {
             return Ok(None);
@@ -177,26 +154,20 @@ impl Database {
         let connection = self.connection.lock()
             .map_err(|_| anyhow::anyhow!("Failed to lock sqlite connection"))?;
 
-        let mut query = connection.prepare_cached("
-            SELECT tokens.value, embeddings.embedding
-            FROM tokens
-            INNER JOIN embeddings
-            ON tokens.id = embeddings.token_id
-            ORDER BY tokens.id ASC
-        ")?;
+        connection.prepare_cached("SELECT token, embedding FROM embeddings")?
+            .query_map([], |row| {
+                let token = row.get::<_, String>(0)?;
+                let embedding = row.get::<_, Vec<u8>>(1)?;
 
-        query.query_map([], |row| {
-            let token = row.get::<_, String>(0)?;
-            let embedding = row.get::<_, Vec<u8>>(1)?;
+                Ok((token, embedding))
+            })?
+            .try_for_each(|row| {
+                let (token, embedding) = row?;
 
-            Ok((token, embedding))
-        })?.try_for_each(|row| {
-            let (token, embedding) = row?;
+                tokens += 1;
 
-            tokens += 1;
-
-            callback(token, parse_embedding(&embedding)?)
-        })?;
+                callback(token, parse_embedding(&embedding)?)
+            })?;
 
         Ok(tokens)
     }
