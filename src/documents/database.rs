@@ -19,9 +19,13 @@ impl Database {
     pub fn open(path: impl AsRef<Path>, cache_size: i64) -> rusqlite::Result<Self> {
         let connection = Connection::open(path)?;
 
-        connection.execute(&format!("PRAGMA cache_size = {cache_size};"), ())?;
+        connection.execute_batch(&format!("
+            PRAGMA cache_size = {cache_size};
 
-        connection.execute_batch("
+            PRAGMA journal_mode = MEMORY;
+            PRAGMA temp_store = MEMORY;
+            PRAGMA synchronous = OFF;
+
             CREATE TABLE IF NOT EXISTS documents (
                 id      INTEGER NOT NULL,
                 input   BLOB    NOT NULL,
@@ -32,7 +36,7 @@ impl Database {
             );
 
             INSERT OR IGNORE INTO documents (id, input, context, output) VALUES (0, '', '', '');
-        ")?;
+        "))?;
 
         Ok(Self {
             connection: Arc::new(Mutex::new(connection))
