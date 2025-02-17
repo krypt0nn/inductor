@@ -75,6 +75,9 @@ impl Cli {
                     eprintln!("{}", format!("🧯 Failed to save config file in {config_path:?}: {err}").red());
                 }
 
+                // Load it again so now default relative paths are made absolute.
+                let config = config::load(&config_path).unwrap_or_default();
+
                 println!("⏳ Initializing documents database in {:?}...", config.documents.database_path);
 
                 if let Err(err) = DocumentsDatabase::open(&config.documents.database_path, config.documents.ram_cache) {
