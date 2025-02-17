@@ -7,12 +7,6 @@ pub mod train_samples;
 pub mod train_batches;
 pub mod model;
 
-pub const EMBEDDING_DEFAULT_ONE_HOT_TOKENS_NUM: usize = 65536;
-pub const EMBEDDING_DEFAULT_SIZE: usize = 64;
-pub const EMBEDDING_DEFAULT_CONTEXT_RADIUS: usize = 3;
-pub const EMBEDDING_DEFAULT_MINIMAL_OCCURENCES: usize = 2;
-pub const EMBEDDING_DEFAULT_SUBSAMPLE_VALUE: f64 = 1e-5;
-
 pub mod prelude {
     pub use super::database::Database as WordEmbeddingsDatabase;
 
@@ -30,12 +24,6 @@ pub mod prelude {
     pub use super::model::WordEmbeddingModel;
 
     pub use super::{
-        EMBEDDING_DEFAULT_ONE_HOT_TOKENS_NUM,
-        EMBEDDING_DEFAULT_SIZE,
-        EMBEDDING_DEFAULT_CONTEXT_RADIUS,
-        EMBEDDING_DEFAULT_MINIMAL_OCCURENCES,
-        EMBEDDING_DEFAULT_SUBSAMPLE_VALUE,
-
         cosine_similarity,
         one_hot_tensor
     };

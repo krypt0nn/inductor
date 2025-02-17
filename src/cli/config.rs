@@ -2,8 +2,6 @@ use std::path::{Path, PathBuf};
 
 use serde::{Serialize, Deserialize};
 
-use crate::prelude::*;
-
 #[inline]
 /// Try reading config from the given file.
 pub fn load(path: impl AsRef<Path>) -> anyhow::Result<CliConfig> {
@@ -154,11 +152,11 @@ impl Default for CliConfigEmbeddings {
             model_path: PathBuf::from("embeddings"),
             logs_path: PathBuf::from("embeddings-logs"),
             ram_cache: 1024 * 1024 * 64,
-            one_hot_tokens: EMBEDDING_DEFAULT_ONE_HOT_TOKENS_NUM,
-            embedding_size: EMBEDDING_DEFAULT_SIZE,
-            context_radius: EMBEDDING_DEFAULT_CONTEXT_RADIUS,
-            minimal_occurences: EMBEDDING_DEFAULT_CONTEXT_RADIUS,
-            subsampling_value: EMBEDDING_DEFAULT_SUBSAMPLE_VALUE,
+            one_hot_tokens: 32768,
+            embedding_size: 16,
+            context_radius: 3,
+            minimal_occurences: 2,
+            subsampling_value: 1e-5,
             learning: CliConfigLearning::default()
         }
     }

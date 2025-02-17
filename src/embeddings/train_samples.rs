@@ -28,18 +28,6 @@ pub struct WordEmbeddingSamplingParams {
     pub subsample_value: f64
 }
 
-impl Default for WordEmbeddingSamplingParams {
-    #[inline]
-    fn default() -> Self {
-        Self {
-            one_hot_tokens: EMBEDDING_DEFAULT_ONE_HOT_TOKENS_NUM,
-            context_radius: EMBEDDING_DEFAULT_CONTEXT_RADIUS,
-            min_occurences: EMBEDDING_DEFAULT_MINIMAL_OCCURENCES,
-            subsample_value: EMBEDDING_DEFAULT_SUBSAMPLE_VALUE
-        }
-    }
-}
-
 #[derive(Debug, Clone)]
 /// Single word embedding train sample.
 pub struct WordEmbeddingTrainSample<B: Backend> {
