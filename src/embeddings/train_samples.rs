@@ -16,7 +16,7 @@ pub struct WordEmbeddingSamplingParams {
     pub context_radius: usize,
 
     /// Skip tokens which occured less times than the specified amount.
-    pub min_occurences: u64,
+    pub min_occurences: usize,
 
     /// Used to calculate probability of skipping word from training samples.
     ///
@@ -96,7 +96,7 @@ impl<B: Backend> WordEmbeddingsTrainSamplesDataset<B> {
 
             for (i, target_token) in tokens.drain(params.context_radius..n - params.context_radius).enumerate() {
                 // Skip token if it occured too few times in input documents.
-                if (target_token.occurences as u64) < params.min_occurences {
+                if (target_token.occurences as usize) < params.min_occurences {
                     continue;
                 }
 

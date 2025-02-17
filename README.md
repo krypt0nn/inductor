@@ -8,29 +8,36 @@ Logical continuation of my [markov-chains](https://github.com/krypt0nn/markov-ch
 cargo build --release
 ```
 
+## 0. Create new project
+
+Every time you want to experiment with some model you need to create a new project. This is a separate folder with
+a TOML formatted config file, bunch of sqlite databases and compressed neural network models. Config file, by default
+named `inductor.toml`, contains parameters used by the tokens parser, word embeddings and text generation models,
+sqlite databases and so on.
+
+```bash
+inductor --config 'path/to/inductor.toml' init
+```
+
+By default `./inductor.toml` path is assumed. It's **generally recommended** to look into this file and tweak
+parameters depending on your needs because defaults are not meant to be good for every usecase.
+
 ## 1. Prepare documents
 
 Document is a structured block of text which contains "input", "context" and "output" sections divided by XML tags.
 By default input and context of a document are empty but you can manually assign them. Documents are compressed and
 stored in SQLite database to save your disk space.
 
-### Create new documents database
-
-```bash
-inductor documents --database documents.db create
-```
-
 ### Insert documents to the dataset
 
 | Optional flags              | Meaning                                                                  |
 | --------------------------- | ------------------------------------------------------------------------ |
-| `--lowercase`               | Convert document text to lowercase                                       |
 | `--discord-chat`            | Assume given document path is a discord chat history dump in JSON format |
 | `--discord-split-documents` | Split messages into separate documents                                   |
 | `--discord-last-n`          | Export only given amount of last messages                                |
 
 ```bash
-inductor documents --database documents.db insert --document my_document.txt
+inductor documents insert --document my_document.txt
 ```
 
 ## 2. Create tokens database
@@ -38,22 +45,10 @@ inductor documents --database documents.db insert --document my_document.txt
 Token is a minimal undividable entity of a document. Depending on documents parser configuration it can contain
 one or many characters, including whitespaces. Tokens database indexes unique tokens which is needed in later steps.
 
-### Create tokens database
-
-```bash
-inductor tokens --database tokens.db create
-```
-
 ### Update tokens database from documents dataset
 
-| Optional flags        | Meaning                                                       |
-| --------------------- | ------------------------------------------------------------- |
-| `--lowercase`         | Convert document text to lowercase                            |
-| `--strip-punctuation` | Remove all punctuation characters. Can easily break your text |
-| `--whitespace-tokens` | Make whitespace characters separate tokens                    |
-
 ```bash
-inductor tokens --database tokens.db update --documents documents.db
+inductor tokens update
 ```
 
 ## 3. Train word embeddings model
@@ -63,12 +58,6 @@ tried to figure out relations between the words in all the documents you provide
 and distribute all the tokens in a vast space. If two words have similar meaning - they will
 be much closer to each other in this space than other words, which will greatly improve
 text generation quality since the prediction error will not be so easily observable.
-
-### Create word embeddings model
-
-```bash
-inductor embeddings --database embeddings.db create
-```
 
 ### Train the model on given documents
 
@@ -85,25 +74,8 @@ P_skip(token) = 1 - clamp(sqrt(subsample_value / token_frequency))
 
 Where `clamp` ensures that `sqrt` value is within `[0.0, 1.0]` range.
 
-| Optional flags                   | Meaning                                                                           |
-| -------------------------------- | --------------------------------------------------------------------------------- |
-| `--embedding-one-hot-tokens`     | Maximal amount of tokens which can be encoded by the model                        |
-| `--embedding-size`               | Amount of dimensions in a word embedding                                          |
-| `--embedding-context-radius`     | Amount or tokens to the left and right of the current one used to train the model |
-| `--embedding-minimal-occurences` | Skip tokens which occured less times than the specified amount                    |
-| `--embedding-subsampling-value`  | Used to calculate probability of skipping word from training samples              |
-| `--lowercase`                    | Convert document text to lowercase                                                |
-| `--strip-punctuation`            | Remove all punctuation characters. Can easily break your text                     |
-| `--whitespace-tokens`            | Make whitespace characters separate tokens                                        |
-| `--remote-device`                | URL to a remote device. Can be set multiple times                                 |
-| `--epochs`                       | Amount of epochs to train the model                                               |
-| `--initial-learn-rate`           | Initial learn rate of the model training. Should be relatively large              |
-| `--final-learn-rate`             | Final learn rate of the model training. Should be relatively small                |
-| `--batch-size`                   | Amount of sequences to train at one iteration. Increases memory use               |
-| `--accumulate-gradients`         | Average last iterations before updating the model's weights                       |
-
 ```bash
-inductor embeddings --database embeddings.db train --documents documents.db --tokens tokens.db --model embeddings-model
+inductor embeddings train
 ```
 
 ### Update embeddinds using pre-trained model
@@ -112,13 +84,8 @@ After model's training embeddings database is updated automatically, but if you
 downloaded the pre-trained model - you can use this method and your own tokens database
 to create word embeddings database.
 
-| Optional flags        | Meaning                                                    |
-| --------------------- | ---------------------------------------------------------- |
-| `--one-hot-tokens`    | Maximal amount of tokens which can be encoded by the model |
-| `--embedding-size`    | Amount of dimensions in a word embedding                   |
-
 ```bash
-inductor embeddings --database embeddings.db update --tokens tokens.db --model embeddings-model
+inductor embeddings update
 ```
 
 ### Compare words to each other
@@ -127,7 +94,7 @@ This method allows you to use word embeddings database to find words with meanin
 closest to your input word. Useful to debug your model's training results.
 
 ```bash
-inductor embeddings --database embeddings.db compare
+inductor embeddings compare
 ```
 
 ### Export word embeddings from the database
@@ -135,8 +102,12 @@ inductor embeddings --database embeddings.db compare
 With this method you can export all the tokens and their embedding vectors to a CSV table
 to analyze them manually, e.g. by using [this website](https://www.csvplot.com).
 
+| Optional flags | Meaning                                                    |
+| -------------- | ---------------------------------------------------------- |
+| `--csv`        | Path to the CSV file where to save all the word embeddings |
+
 ```bash
-inductor embeddings --database embeddings.db export --csv embeddings.csv
+inductor embeddings export --csv embeddings.csv
 ```
 
 ## 4. Train text generation model
@@ -149,40 +120,18 @@ on different positions within the text. You can disable positional encoding by s
 
 ### Train the model on given documents and word embeddings
 
-| Optional flags               | Meaning                                                              |
-| ---------------------------- | -------------------------------------------------------------------- |
-| `--embedding-size`           | Amount of dimensions in a word embedding                             |
-| `--context-tokens-num`       | Amount of tokens used to predict the next one                        |
-| `--position-encoding-period` | Amount of tokens after which position encoding will start repeating  |
-| `--lowercase`                | Convert document text to lowercase                                   |
-| `--strip-punctuation`        | Remove all punctuation characters. Can easily break your text        |
-| `--whitespace-tokens`        | Make whitespace characters separate tokens                           |
-| `--remote-device`            | URL to a remote device. Can be set multiple times                    |
-| `--epochs`                   | Amount of epochs to train the model                                  |
-| `--initial-learn-rate`       | Initial learn rate of the model training. Should be relatively large |
-| `--final-learn-rate`         | Final learn rate of the model training. Should be relatively small   |
-| `--batch-size`               | Amount of sequences to train at one iteration. Increases memory use  |
-| `--accumulate-gradients`     | Average last iterations before updating the model's weights          |
-
 ```bash
-inductor text-generator --model text-generator-model train --documents documents.db --embeddings embeddings.db
+inductor text-generator train
 ```
 
 ### Generate text using the trained model
 
-| Optional flags               | Meaning                                                             |
-| ---------------------------- | ------------------------------------------------------------------- |
-| `--embedding-size`           | Amount of dimensions in a word embedding                            |
-| `--context-tokens-num`       | Amount of tokens used to predict the next one                       |
-| `--position-encoding-period` | Amount of tokens after which position encoding will start repeating |
-| `--lowercase`                | Convert document text to lowercase                                  |
-| `--strip-punctuation`        | Remove all punctuation characters. Can easily break your text       |
-| `--whitespace-tokens`        | Make whitespace characters separate tokens                          |
-| `--context`                  | Optional context string applied to the generating document          |
-| `--max-tokens`               | Maximal amount of tokens to generate                                |
+| Optional flags | Meaning                                                    |
+| -------------- | ---------------------------------------------------------- |
+| `--context`    | Optional context string applied to the generating document |
 
 ```bash
-inductor text-generator --model text-generator-model generate --embeddings embeddings.db
+inductor text-generator generate
 ```
 
 ## Bonus: host your device for remote model training

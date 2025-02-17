@@ -37,19 +37,12 @@ struct DiscordAuthor {
 }
 
 #[derive(Parser)]
-pub enum DocumentsCLI {
-    /// Create new documents database.
-    Create,
-
+pub enum DocumentsCli {
     /// Insert document into the database.
     Insert {
         #[arg(long)]
         /// Path to the document file.
         document: PathBuf,
-
-        #[arg(long)]
-        /// Convert content of the document to lowercase.
-        lowercase: bool,
 
         #[arg(long)]
         /// Read input file as discord chat history export in JSON format.
@@ -67,31 +60,14 @@ pub enum DocumentsCLI {
     }
 }
 
-impl DocumentsCLI {
+impl DocumentsCli {
     #[inline]
-    pub fn execute(self, database: PathBuf, cache_size: i64) -> anyhow::Result<()> {
+    pub fn execute(self, config: super::config::CliConfig) -> anyhow::Result<()> {
         match self {
-            Self::Create => {
-                let database = database.canonicalize().unwrap_or(database);
+            Self::Insert { document, discord_chat, discord_split_documents, discord_last_n } => {
+                println!("⏳ Opening documents database in {:?}...", config.documents.database_path);
 
-                println!("⏳ Creating documents database in {database:?}...");
-
-                match DocumentsDatabase::open(&database, cache_size) {
-                    Ok(_) => {
-                        println!("{}", "🚀 Database created".green());
-                        println!("📖 {} {} command will create new database automatically if needed", "Note:".blue(), "`documents insert`".yellow());
-                    }
-
-                    Err(err) => eprintln!("{}", format!("🧯 Failed to create database: {err}").red())
-                }
-            }
-
-            Self::Insert { document, lowercase, discord_chat, discord_split_documents, discord_last_n } => {
-                let database = database.canonicalize().unwrap_or(database);
-
-                println!("⏳ Opening documents database in {database:?}...");
-
-                let database = match DocumentsDatabase::open(&database, cache_size) {
+                let database = match DocumentsDatabase::open(&config.documents.database_path, config.documents.ram_cache) {
                     Ok(database) => database,
                     Err(err) => {
                         eprintln!("{}", format!("🧯 Failed to open database: {err}").red());
@@ -106,7 +82,7 @@ impl DocumentsCLI {
 
                 match std::fs::read_to_string(document) {
                     Ok(mut document) if discord_chat => {
-                        if lowercase {
+                        if config.documents.lowercase {
                             document = document.to_lowercase();
                         }
 
@@ -180,7 +156,7 @@ impl DocumentsCLI {
                     }
 
                     Ok(mut document) => {
-                        if lowercase {
+                        if config.documents.lowercase {
                             document = document.to_lowercase();
                         }
 

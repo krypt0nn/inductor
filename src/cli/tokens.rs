@@ -1,4 +1,3 @@
-use std::path::PathBuf;
 use std::collections::HashSet;
 
 use clap::Parser;
@@ -7,67 +6,19 @@ use colorful::Colorful;
 use crate::prelude::*;
 
 #[derive(Parser)]
-pub enum TokensCLI {
-    /// Create new tokens database.
-    Create,
-
+pub enum TokensCli {
     /// Insert all tokens from the documents database.
-    Update {
-        #[arg(long, short)]
-        /// Path to the documents database.
-        documents: PathBuf,
-
-        #[arg(long, short)]
-        /// Convert content of the documents to lowercase.
-        lowercase: bool,
-
-        #[arg(long, short)]
-        /// Strip punctuation from the documents.
-        strip_punctuation: bool,
-
-        #[arg(long, short)]
-        /// Save whitespace characters as tokens.
-        whitespace_tokens: bool
-    }
+    Update
 }
 
-impl TokensCLI {
+impl TokensCli {
     #[inline]
-    pub fn execute(self, database: PathBuf, cache_size: i64) -> anyhow::Result<()> {
+    pub fn execute(self, config: super::config::CliConfig) -> anyhow::Result<()> {
         match self {
-            Self::Create => {
-                let database = database.canonicalize().unwrap_or(database);
+            Self::Update => {
+                println!("⏳ Opening documents database in {:?}...", config.documents.database_path);
 
-                println!("⏳ Creating tokens database in {database:?}...");
-
-                match TokensDatabase::open(&database, cache_size) {
-                    Ok(_) => {
-                        println!("{}", "🚀 Database created".green());
-                        println!("📖 {} {} command will create new database automatically if needed", "Note:".blue(), "`tokens update`".yellow());
-                    }
-
-                    Err(err) => eprintln!("{}", format!("🧯 Failed to create database: {err}").red())
-                }
-            }
-
-            Self::Update { documents, lowercase, strip_punctuation, whitespace_tokens } => {
-                let tokens = database.canonicalize().unwrap_or(database);
-                let documents = documents.canonicalize().unwrap_or(documents);
-
-                println!("⏳ Opening tokens database in {tokens:?}...");
-
-                let mut tokens = match TokensDatabase::open(&tokens, cache_size) {
-                    Ok(tokens) => tokens,
-                    Err(err) => {
-                        eprintln!("{}", format!("🧯 Failed to open tokens database: {err}").red());
-
-                        return Ok(());
-                    }
-                };
-
-                println!("⏳ Opening documents database in {documents:?}...");
-
-                let documents = match DocumentsDatabase::open(&documents, cache_size) {
+                let documents = match DocumentsDatabase::open(&config.documents.database_path, config.documents.ram_cache) {
                     Ok(documents) => documents,
                     Err(err) => {
                         eprintln!("{}", format!("🧯 Failed to open documents database: {err}").red());
@@ -76,7 +27,22 @@ impl TokensCLI {
                     }
                 };
 
-                let parser = DocumentsParser::new(lowercase, strip_punctuation, whitespace_tokens);
+                println!("⏳ Opening tokens database in {:?}...", config.tokens.database_path);
+
+                let mut tokens = match TokensDatabase::open(&config.tokens.database_path, config.tokens.ram_cache) {
+                    Ok(tokens) => tokens,
+                    Err(err) => {
+                        eprintln!("{}", format!("🧯 Failed to open tokens database: {err}").red());
+
+                        return Ok(());
+                    }
+                };
+
+                let parser = DocumentsParser::new(
+                    config.tokens.lowercase,
+                    config.tokens.strip_punctuation,
+                    config.tokens.whitespace_tokens
+                );
 
                 println!("⏳ Updating tokens database...");
 

@@ -5,83 +5,51 @@ use colorful::Colorful;
 
 use burn::backend::{Wgpu, wgpu::WgpuDevice};
 
+use crate::prelude::*;
+
+pub mod config;
 pub mod documents;
 pub mod tokens;
 pub mod embeddings;
 pub mod text_generator;
 
 #[derive(Parser)]
-pub enum CLI {
+pub struct Cli {
+    #[arg(long, short)]
+    /// Path to the project's config file.
+    pub config: Option<PathBuf>,
+
+    #[command(subcommand)]
+    pub command: CliVariant
+}
+
+#[derive(Parser)]
+pub enum CliVariant {
+    /// Create new project.
+    Init,
+
     /// Manage datasets of plain text corpuses.
     Documents {
-        #[arg(long, short)]
-        /// Path to the database file.
-        database: PathBuf,
-
-        #[arg(long, default_value_t = 1024 * 1024 * 64)]
-        /// SQLite database cache size.
-        ///
-        /// Positive value sets cache size in bytes, negative - in sqlite pages.
-        cache_size: i64,
-
         #[command(subcommand)]
-        command: documents::DocumentsCLI
+        command: documents::DocumentsCli
     },
 
     /// Manage datasets of plain text tokens.
     Tokens {
-        #[arg(long, short)]
-        /// Path to the database file.
-        database: PathBuf,
-
-        #[arg(long, default_value_t = 1024 * 1024 * 16)]
-        /// SQLite database cache size.
-        ///
-        /// Positive value sets cache size in bytes, negative - in sqlite pages.
-        cache_size: i64,
-
         #[command(subcommand)]
-        command: tokens::TokensCLI
+        command: tokens::TokensCli
     },
 
     /// Manage embeddings of plain text tokens.
     Embeddings {
-        #[arg(long, short)]
-        /// Path to the database file.
-        database: PathBuf,
-
-        #[arg(long, default_value_t = 1024 * 1024 * 64)]
-        /// SQLite database cache size.
-        ///
-        /// Positive value sets cache size in bytes, negative - in sqlite pages.
-        cache_size: i64,
-
         #[command(subcommand)]
-        command: embeddings::EmbeddingsCLI
+        command: embeddings::EmbeddingsCli
     },
 
     /// Manage text generation model.
     TextGenerator {
-        #[arg(long, short)]
-        /// Path to the text generation model.
-        model: PathBuf,
-
-        #[arg(long, short, default_value_t = 128)]
-        /// Amount of dimensions in a word embedding.
-        embedding_size: usize,
-
-        #[arg(long, short, default_value_t = 4)]
-        /// Amount of tokens used to predict the next one.
-        context_tokens_num: usize,
-
-        #[arg(long, short, default_value_t = 5000)]
-        /// Amount of tokens after which position encoding will start repeating.
-        ///
-        /// If set to 0 no positional encoding is applied.
-        position_encoding_period: usize,
-
         #[command(subcommand)]
-        command: text_generator::TextGeneratorCLI
+        command: text_generator::TextGeneratorCli
     },
 
     /// Host your device for remote computations.
@@ -91,30 +59,57 @@ pub enum CLI {
     }
 }
 
-impl CLI {
+impl Cli {
     #[inline]
     pub fn execute(self) -> anyhow::Result<()> {
-        match self {
-            Self::Documents { database, cache_size, command } => command.execute(database, cache_size),
-            Self::Tokens { database, cache_size, command } => command.execute(database, cache_size),
-            Self::Embeddings { database, cache_size, command } => command.execute(database, cache_size),
+        let config_path = self.config.unwrap_or_else(|| PathBuf::from("inductor.toml"));
+        let config_path = config_path.canonicalize().unwrap_or(config_path);
 
-            Self::TextGenerator {
-                model,
-                embedding_size,
-                context_tokens_num,
-                position_encoding_period,
-                command
-            } => {
-                command.execute(
-                    model,
-                    embedding_size,
-                    context_tokens_num,
-                    position_encoding_period
-                )
+        let config = config::load(&config_path).unwrap_or_default();
+
+        match self.command {
+            CliVariant::Init => {
+                println!("⏳ Saving config file in {config_path:?}...");
+
+                if let Err(err) = std::fs::write(&config_path, toml::to_string_pretty(&config)?) {
+                    eprintln!("{}", format!("🧯 Failed to save config file in {config_path:?}: {err}").red());
+                }
+
+                println!("⏳ Initializing documents database in {:?}...", config.documents.database_path);
+
+                if let Err(err) = DocumentsDatabase::open(&config.documents.database_path, config.documents.ram_cache) {
+                    eprintln!("{}", format!("🧯 Failed to open documents database: {err}").red());
+
+                    return Ok(());
+                }
+
+                println!("⏳ Initializing tokens database in {:?}...", config.tokens.database_path);
+
+                if let Err(err) = TokensDatabase::open(&config.tokens.database_path, config.tokens.ram_cache) {
+                    eprintln!("{}", format!("🧯 Failed to open tokens database: {err}").red());
+
+                    return Ok(());
+                }
+
+                println!("⏳ Initializing word embeddings database in {:?}...", config.embeddings.database_path);
+
+                if let Err(err) = WordEmbeddingsDatabase::open(&config.embeddings.database_path, config.embeddings.ram_cache) {
+                    eprintln!("{}", format!("🧯 Failed to open word embeddings database: {err}").red());
+
+                    return Ok(());
+                }
+
+                println!("{}", "🚀 Project created".green());
+
+                Ok(())
             }
 
-            Self::Serve { port } => {
+            CliVariant::Documents { command } => command.execute(config),
+            CliVariant::Tokens { command } => command.execute(config),
+            CliVariant::Embeddings { command } => command.execute(config),
+            CliVariant::TextGenerator { command } => command.execute(config),
+
+            CliVariant::Serve { port } => {
                 let device = WgpuDevice::default();
 
                 println!("🚀 Hosting your GPU under {}", format!("ws://0.0.0.0:{port}").yellow());

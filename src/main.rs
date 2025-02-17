@@ -18,7 +18,7 @@ pub mod prelude {
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
 fn main() {
-    if let Err(err) = cli::CLI::parse().execute() {
+    if let Err(err) = cli::Cli::parse().execute() {
         eprintln!("{}", format!("🧯 An error occured: {err}").red());
     }
 }
