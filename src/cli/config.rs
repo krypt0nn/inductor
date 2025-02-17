@@ -193,7 +193,7 @@ impl Default for CliConfigTextGenerator {
         Self {
             model_path: PathBuf::from("text-generator"),
             logs_path: PathBuf::from("text-generator-logs"),
-            context_tokens_num: 4,
+            context_tokens_num: 16,
             position_encoding_period: 5000,
             max_generated_tokens: 512,
             learning: CliConfigLearning::default()
@@ -232,7 +232,7 @@ impl Default for CliConfigLearning {
             epochs: 10,
             initial_learn_rate: 3e-2,
             final_learn_rate: 3e-5,
-            batch_size: 32,
+            batch_size: 64,
             accumulate_gradients: 2,
             dataset_workers_num: 4,
             remote_devices: vec![]

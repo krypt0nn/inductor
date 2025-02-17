@@ -149,7 +149,7 @@ impl TextGeneratorCli {
 
                     println!("⏳ Training the model...");
 
-                    let learner = LearnerBuilder::new(&params.config.text_generator.model_path)
+                    let learner = LearnerBuilder::new(&params.config.text_generator.logs_path)
                         // .metric_train_numeric(AccuracyMetric::new())
                         // .metric_valid_numeric(AccuracyMetric::new())
                         .metric_train_numeric(LossMetric::new())

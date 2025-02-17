@@ -1,7 +1,7 @@
 use std::path::Path;
 
 use burn::prelude::*;
-use burn::nn::{Linear, LinearConfig};
+use burn::nn::{Linear, LinearConfig, Dropout, DropoutConfig};
 use burn::nn::Initializer;
 use burn::nn::loss::{MseLoss, Reduction};
 use burn::tensor::backend::AutodiffBackend;
@@ -14,6 +14,7 @@ use crate::prelude::*;
 pub struct TextGenerationModel<B: Backend> {
     encoder: Linear<B>,
     decoder: Linear<B>,
+    dropout: Dropout,
     embedding_size: usize,
     context_tokens_num: usize,
     position_encoding_period: usize
@@ -39,6 +40,8 @@ impl<B: Backend> TextGenerationModel<B> {
                 .with_bias(true)
                 .with_initializer(Initializer::XavierNormal { gain: 2.0 })
                 .init(device),
+
+            dropout: DropoutConfig::new(0.1).init(),
 
             embedding_size,
             context_tokens_num,
@@ -86,7 +89,8 @@ impl<B: Backend> TextGenerationModel<B> {
 
     fn forward_batch(&self, samples: TextGeneratorTrainSamplesBatch<B>) -> RegressionOutput<B> {
         let hidden = self.encoder.forward(samples.contexts);
-        let predicted = self.decoder.forward(hidden);
+        let dropped_hidden = self.dropout.forward(hidden);
+        let predicted = self.decoder.forward(dropped_hidden);
 
         let loss = MseLoss::new().forward(
             predicted.clone(),
