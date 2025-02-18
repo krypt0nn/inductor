@@ -2,6 +2,8 @@ use std::path::{Path, PathBuf};
 
 use serde::{Serialize, Deserialize};
 
+use crate::prelude::*;
+
 #[inline]
 /// Try reading config from the given file.
 pub fn load(path: impl AsRef<Path>) -> anyhow::Result<CliConfig> {
@@ -125,6 +127,9 @@ pub struct CliConfigEmbeddings {
     /// Positive value sets cache size in bytes, negative - in sqlite pages.
     pub ram_cache: i64,
 
+    /// Method used to learn word embeddings.
+    pub sampling_method: WordEmbeddingSamplingMethod,
+
     /// Maximal amount of tokens which can be encoded by the model.
     pub one_hot_tokens: usize,
 
@@ -152,6 +157,7 @@ impl Default for CliConfigEmbeddings {
             model_path: PathBuf::from("embeddings"),
             logs_path: PathBuf::from("embeddings-logs"),
             ram_cache: 1024 * 1024 * 64,
+            sampling_method: WordEmbeddingSamplingMethod::default(),
             one_hot_tokens: 32768,
             embedding_size: 16,
             context_radius: 3,

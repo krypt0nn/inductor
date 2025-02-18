@@ -11,6 +11,7 @@ pub mod prelude {
     pub use super::database::Database as WordEmbeddingsDatabase;
 
     pub use super::train_samples::{
+        WordEmbeddingSamplingMethod,
         WordEmbeddingSamplingParams,
         WordEmbeddingsTrainSamplesDataset,
         WordEmbeddingTrainSample

@@ -1,12 +1,37 @@
 use std::sync::Arc;
 
+use serde::{Serialize, Deserialize};
+
 use burn::prelude::*;
 use burn::data::dataset::Dataset;
 
 use crate::prelude::*;
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Default, Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum WordEmbeddingSamplingMethod {
+    #[default]
+    /// Continuous Bag of Words (CBOW) - learn to predict one word from its
+    /// surrounding context (many to one).
+    ///
+    /// - Trains faster than skip-gram.
+    /// - Uses smaller context window.
+    /// - Requires larger dataset.
+    Cbow,
+
+    /// Skip-Gram - learn to predict surrouding context from one
+    /// target word (one to many).
+    ///
+    /// - Trains slower than CBOW.
+    /// - Uses larger context window.
+    /// - Can be used on smaller dataset with many rare tokens.
+    SkipGram
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct WordEmbeddingSamplingParams {
+    /// Method used to learn word embeddings.
+    pub sampling_method: WordEmbeddingSamplingMethod,
+
     /// Maximal amount of tokens which can be learned by the model.
     ///
     /// Directly affects RAM usage.
@@ -127,10 +152,20 @@ impl<B: Backend> Dataset<WordEmbeddingTrainSample<B>> for WordEmbeddingsTrainSam
         context_tokens[..self.params.context_radius].copy_from_slice(&self.document_tokens[i - self.params.context_radius..i]);
         context_tokens[self.params.context_radius..].copy_from_slice(&self.document_tokens[i + 1..i + self.params.context_radius + 1]);
 
-        Some(WordEmbeddingTrainSample {
-            context: one_hot_tensor(&context_tokens, self.params.one_hot_tokens, &self.device),
-            target: one_hot_tensor(&[target_token], self.params.one_hot_tokens, &self.device)
-        })
+        let context_tensor = one_hot_tensor(&context_tokens, self.params.one_hot_tokens, &self.device);
+        let target_tensor = one_hot_tensor(&[target_token], self.params.one_hot_tokens, &self.device);
+
+        match self.params.sampling_method {
+            WordEmbeddingSamplingMethod::Cbow => Some(WordEmbeddingTrainSample {
+                context: context_tensor,
+                target: target_tensor
+            }),
+
+            WordEmbeddingSamplingMethod::SkipGram => Some(WordEmbeddingTrainSample {
+                context: target_tensor,
+                target: context_tensor
+            })
+        }
     }
 
     #[inline]
