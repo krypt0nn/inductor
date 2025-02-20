@@ -139,6 +139,10 @@ pub struct CliConfigEmbeddings {
     /// Amount or tokens to the left and right of the current one used to train the model.
     pub context_radius: usize,
 
+    /// Use uniformal random distribution for context radius,
+    /// in range `[1, context_radius]`.
+    pub dynamic_context_radius: bool,
+
     /// Skip tokens which occured less times than the specified amount.
     pub minimal_occurences: usize,
 
@@ -161,8 +165,9 @@ impl Default for CliConfigEmbeddings {
             one_hot_tokens: 32768,
             embedding_size: 16,
             context_radius: 3,
+            dynamic_context_radius: true,
             minimal_occurences: 2,
-            subsampling_value: 1e-5,
+            subsampling_value: 1e-3,
             learning: CliConfigLearning::default()
         }
     }

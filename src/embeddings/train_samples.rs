@@ -40,6 +40,10 @@ pub struct WordEmbeddingSamplingParams {
     /// Amount of tokens around the target one to learn embeddings from.
     pub context_radius: usize,
 
+    /// Use uniformal random distribution for context radius,
+    /// in range `[1, context_radius]`.
+    pub dynamic_context_radius: bool,
+
     /// Skip tokens which occured less times than the specified amount.
     pub min_occurences: usize,
 
@@ -48,7 +52,7 @@ pub struct WordEmbeddingSamplingParams {
     /// Probability of keeping word in train samples is calculated as:
     ///
     /// ```text,ignore
-    /// P_keep(token) = sqrt(subsample_value / token_frequency)
+    /// P_keep(token) = sqrt(token_frequency / subsample_value + 1) * subsample_value / token_frequency
     /// ```
     pub subsample_value: f64
 }
@@ -114,7 +118,8 @@ impl<B: Backend> WordEmbeddingsTrainSamplesDataset<B> {
                 }
 
                 // Calculate probability of skipping this token.
-                let skip_probability = 1.0 - (params.subsample_value / target_token.frequency).sqrt().clamp(0.0, 1.0);
+                // let skip_probability = 1.0 - (params.subsample_value / target_token.frequency).sqrt().clamp(0.0, 1.0);
+                let skip_probability = 1.0 - ((target_token.frequency / params.subsample_value + 1.0).sqrt() * (params.subsample_value / target_token.frequency)).clamp(0.0, 1.0);
 
                 // Randomly skip it.
                 if fastrand::f64() < skip_probability {
@@ -147,10 +152,16 @@ impl<B: Backend> Dataset<WordEmbeddingTrainSample<B>> for WordEmbeddingsTrainSam
 
         let target_token = self.document_tokens[i];
 
-        let mut context_tokens = vec![0; self.params.context_radius * 2];
+        let context_radius = if self.params.dynamic_context_radius {
+            fastrand::usize(1..=self.params.context_radius)
+        } else {
+            self.params.context_radius
+        };
 
-        context_tokens[..self.params.context_radius].copy_from_slice(&self.document_tokens[i - self.params.context_radius..i]);
-        context_tokens[self.params.context_radius..].copy_from_slice(&self.document_tokens[i + 1..i + self.params.context_radius + 1]);
+        let mut context_tokens = vec![0; context_radius * 2];
+
+        context_tokens[..context_radius].copy_from_slice(&self.document_tokens[i - context_radius..i]);
+        context_tokens[context_radius..].copy_from_slice(&self.document_tokens[i + 1..i + context_radius + 1]);
 
         let context_tensor = one_hot_tensor(&context_tokens, self.params.one_hot_tokens, &self.device);
         let target_tensor = one_hot_tensor(&[target_token], self.params.one_hot_tokens, &self.device);

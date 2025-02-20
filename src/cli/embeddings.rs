@@ -111,6 +111,7 @@ impl EmbeddingsCli {
                         sampling_method: params.config.embeddings.sampling_method,
                         one_hot_tokens: params.config.embeddings.one_hot_tokens,
                         context_radius: params.config.embeddings.context_radius,
+                        dynamic_context_radius: params.config.embeddings.dynamic_context_radius,
                         min_occurences: params.config.embeddings.minimal_occurences,
                         subsample_value: params.config.embeddings.subsampling_value
                     };
