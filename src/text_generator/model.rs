@@ -1,8 +1,7 @@
 use std::path::Path;
 
 use burn::prelude::*;
-use burn::nn::{Linear, LinearConfig, Dropout, DropoutConfig};
-use burn::nn::Initializer;
+use burn::nn::{Initializer, Linear, LinearConfig, Dropout, DropoutConfig};
 use burn::nn::loss::{MseLoss, Reduction};
 use burn::tensor::backend::AutodiffBackend;
 use burn::train::{TrainStep, TrainOutput, ValidStep, RegressionOutput};
@@ -95,7 +94,7 @@ impl<B: Backend> TextGenerationModel<B> {
         let loss = MseLoss::new().forward(
             predicted.clone(),
             samples.targets.clone(),
-            Reduction::Mean
+            Reduction::Sum
         );
 
         RegressionOutput::new(loss, predicted, samples.targets)
