@@ -60,7 +60,7 @@ pub struct CliConfigDocuments {
 
     /// SQLite database cache size.
     ///
-    /// Positive value sets cache size in bytes, negative - in sqlite pages.
+    /// Positive value sets cache size in sqlite pages, negative - in kilobytes.
     pub ram_cache: i64,
 
     /// Convert content of the documents to lowercase.
@@ -72,7 +72,7 @@ impl Default for CliConfigDocuments {
     fn default() -> Self {
         Self {
             database_path: PathBuf::from("documents.db"),
-            ram_cache: 1024 * 1024 * 128,
+            ram_cache: -1024 * 128,
             lowercase: false
         }
     }
@@ -85,7 +85,7 @@ pub struct CliConfigTokens {
 
     /// SQLite database cache size.
     ///
-    /// Positive value sets cache size in bytes, negative - in sqlite pages.
+    /// Positive value sets cache size in sqlite pages, negative - in kilobytes.
     pub ram_cache: i64,
 
     /// Convert content of the documents to lowercase.
@@ -103,7 +103,7 @@ impl Default for CliConfigTokens {
     fn default() -> Self {
         Self {
             database_path: PathBuf::from("tokens.db"),
-            ram_cache: 1024 * 1024 * 16,
+            ram_cache: -1024 * 16,
             lowercase: false,
             strip_punctuation: false,
             whitespace_tokens: false
@@ -124,7 +124,7 @@ pub struct CliConfigEmbeddings {
 
     /// SQLite database cache size.
     ///
-    /// Positive value sets cache size in bytes, negative - in sqlite pages.
+    /// Positive value sets cache size in sqlite pages, negative - in kilobytes.
     pub ram_cache: i64,
 
     /// Method used to learn word embeddings.
@@ -160,7 +160,7 @@ impl Default for CliConfigEmbeddings {
             database_path: PathBuf::from("embeddings.db"),
             model_path: PathBuf::from("embeddings"),
             logs_path: PathBuf::from("embeddings-logs"),
-            ram_cache: 1024 * 1024 * 64,
+            ram_cache: -1024 * 64,
             sampling_method: WordEmbeddingSamplingMethod::default(),
             one_hot_tokens: 32768,
             embedding_size: 16,
