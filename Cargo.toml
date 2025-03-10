@@ -21,11 +21,15 @@ colorful = "0.3.2"
 
 burn = { version = "0.16", features = ["metrics", "train", "wgpu", "fusion", "remote", "server"] }
 
+# fix burn crate error: https://github.com/tracel-ai/burn/issues/2876
+bincode = "=2.0.0-rc.3"
+bincode_derive = "=2.0.0-rc.3"
+
 anyhow = "1.0"
 mimalloc = "0.1"
-rusqlite = { version = "*", features = ["bundled"] }
+rusqlite = { version = "0.32", features = ["bundled"] }
 lz4_flex = "0.11"
-fastrand = "2.2"
+fastrand = "2.3"
 rand = "0.8.5"
 
 serde = { version = "1.0", features = ["derive"] }
