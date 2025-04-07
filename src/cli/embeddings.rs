@@ -254,12 +254,12 @@ impl EmbeddingsCli {
 
                 let device = WgpuDevice::default();
 
-                let embeddings_model = WordEmbeddingModel::<Autodiff<Wgpu>>::load(
+                let embeddings_model = WordEmbeddingModel::<Wgpu>::load(
                     config.embeddings.one_hot_tokens,
                     config.embeddings.embedding_size,
                     &config.embeddings.model_path,
                     &device
-                ).unwrap_or_else(|_| WordEmbeddingModel::<Autodiff<Wgpu>>::random(
+                ).unwrap_or_else(|_| WordEmbeddingModel::<Wgpu>::random(
                     config.embeddings.one_hot_tokens,
                     config.embeddings.embedding_size,
                     &device
