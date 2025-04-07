@@ -66,13 +66,14 @@ it will read `embedding_context_radius * 2` tokens around the target token and l
 surrounding tokens. To improve model's performance we skip tokens with too few occurences in the documents
 (with less than `minimal_occurences`) and randomly skip tokens based on their frequency and `subsampling_value`.
 
-Token skipping probability is calculated as:
+Probability of keeping word in train samples is calculated as:
 
 ```
-P_skip(token) = 1 - clamp(sqrt(subsample_value / token_frequency))
+P_keep(token) = clamp(sqrt(token_frequency / subsample_value + 1) * subsample_value / token_frequency)
 ```
 
 Where `clamp` ensures that `sqrt` value is within `[0.0, 1.0]` range.
+Lower subsample value means less train samples.
 
 ```bash
 inductor embeddings train
