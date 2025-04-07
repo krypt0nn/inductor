@@ -71,17 +71,6 @@ impl EmbeddingsCli {
                     }
                 };
 
-                println!("⏳ Opening word embeddings database in {:?}...", config.embeddings.database_path);
-
-                let embeddings = match WordEmbeddingsDatabase::open(&config.embeddings.database_path, config.embeddings.ram_cache) {
-                    Ok(embeddings) => embeddings,
-                    Err(err) => {
-                        eprintln!("{}", format!("🧯 Failed to open word embeddings database: {err}").red());
-
-                        return Ok(());
-                    }
-                };
-
                 let parser = DocumentsParser::new(
                     config.tokens.lowercase,
                     config.tokens.strip_punctuation,
@@ -91,7 +80,6 @@ impl EmbeddingsCli {
                 struct TrainParams<B: Backend> {
                     pub documents: DocumentsDatabase,
                     pub tokens: TokensDatabase,
-                    pub embeddings: WordEmbeddingsDatabase,
                     pub parser: DocumentsParser,
                     pub config: super::config::CliConfig,
                     pub devices: Vec<B::Device>
@@ -201,18 +189,6 @@ impl EmbeddingsCli {
                     let embeddings_model = learner.fit(train_samples_dataset, validate_samples_dataset);
 
                     println!("{}", "✅ Model trained".green());
-                    println!("⏳ Updating token embeddings...");
-
-                    let tokens = params.tokens.for_each(|token| {
-                        let embedding = embeddings_model.encode(token.id as usize, &device)
-                            .to_data();
-
-                        let embedding = embedding.as_slice().map_err(|err| anyhow::anyhow!("Failed to cast tensor into floats slice: {err:?}"))?;
-
-                        params.embeddings.insert_embedding(token.value, embedding)
-                    })?;
-
-                    println!("✅ Updated {} embeddings", tokens.to_string().yellow());
                     println!("⏳ Saving the model...");
 
                     embeddings_model.save(params.config.embeddings.model_path)?;
@@ -226,7 +202,6 @@ impl EmbeddingsCli {
                     train::<Wgpu>(TrainParams {
                         documents,
                         tokens,
-                        embeddings,
                         parser,
                         config,
                         devices: vec![WgpuDevice::default()]
@@ -237,7 +212,6 @@ impl EmbeddingsCli {
                     train::<RemoteBackend>(TrainParams {
                         documents,
                         tokens,
-                        embeddings,
                         parser,
 
                         devices: config.embeddings.learning.remote_devices.iter()

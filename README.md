@@ -80,9 +80,12 @@ inductor embeddings train
 
 ### Update embeddinds using pre-trained model
 
-After model's training embeddings database is updated automatically, but if you
-downloaded the pre-trained model - you can use this method and your own tokens database
-to create word embeddings database.
+After the model is trained you need to update the database of all the embeddings
+from the input documents.  This is needed to optimize embeddings querying during
+text generation.
+
+> Note that  in previous versions  word embeddings  were  updated  automatically
+> after the training is finished, but not you need to run this command yourself.
 
 ```bash
 inductor embeddings update
